@@ -1,124 +1,124 @@
-# Модуль — vec2-math
+# Module — vec2-math
 
-## Назначение
+## Purpose
 
-Модуль предоставляет фундаментальный строительный блок всей игровой физики и геометрии — двумерный вектор `Vec2` и набор математических утилит общего назначения (случайные числа в диапазоне, `clamp`, `wrap` по модулю, `lerp`, перевод градусов в радианы и обратно). Без него ни одна игровая сущность не сможет корректно двигаться, поворачиваться и «переезжать» через край экрана-тора; коллизии circle-to-circle и тяга корабля по направлению носа тоже опираются именно на этот модуль. Модуль не содержит состояния и не зависит ни от чего, кроме стандартной библиотеки ES2022.
+The module provides the fundamental building block of all game physics and geometry — a two-dimensional vector `Vec2` and a set of general-purpose mathematical utilities (random numbers in a range, `clamp`, modular `wrap`, `lerp`, degree-to-radian conversion and back). Without it no game entity can correctly move, rotate, or "cross" the screen-torus edge; circle-to-circle collision detection and ship thrust along the nose direction also rely on this module. The module contains no state and depends on nothing beyond the standard ES2022 library.
 
-## Ответственности
+## Responsibilities
 
-- Определение формы двумерного вектора `Vec2` как иммутабельного значения.
-- Базовые векторные операции: сложение, вычитание, умножение на скаляр, скалярное произведение, длина и квадрат длины, нормализация, поворот на угол, расстояние между точками.
-- Скалярные математические утилиты: `clamp(x, min, max)`, `lerp(a, b, t)`, `wrap(x, size)` (неотрицательный модуль), `randomRange(min, max)`, `randomInt(min, max)`.
-- Конвертация углов: `degToRad(deg)`, `radToDeg(rad)`.
-- Чистые функции без побочных эффектов и без скрытого состояния: все операции возвращают новое значение, не мутируя входы.
+- Defining the shape of a two-dimensional vector `Vec2` as an immutable value.
+- Basic vector operations: addition, subtraction, scalar multiplication, dot product, length and squared length, normalisation, rotation by an angle, distance between points.
+- Scalar math utilities: `clamp(x, min, max)`, `lerp(a, b, t)`, `wrap(x, size)` (non-negative modulus), `randomRange(min, max)`, `randomInt(min, max)`.
+- Angle conversion: `degToRad(deg)`, `radToDeg(rad)`.
+- Pure functions without side effects or hidden state: all operations return a new value without mutating inputs.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Модуль не занимается коллизиями (это делает `CollisionSystem`), не знает про круги, прямоугольники и AABB.
-- Не реализует матрицы, кватернионы, 3D-векторы и какую-либо линейную алгебру выше базовых операций над `Vec2`.
-- Не содержит функций, специфичных для Canvas 2D (поворот контекста, трансформы матриц) — это зона `Renderer`.
-- Не держит и не кэширует никакие значения между вызовами; не предоставляет пулов объектов для переиспользования.
-- Не выполняет рантайм-валидацию аргументов (NaN, бесконечности, неверные типы) — корректность гарантируется системой типов TypeScript на этапе компиляции.
-- Не инкапсулирует генератор случайных чисел со своим сидом — использует глобальный `Math.random()`.
+- The module does not handle collisions (that is `CollisionSystem`'s job), knows nothing about circles, rectangles, or AABBs.
+- Does not implement matrices, quaternions, 3D vectors, or any linear algebra beyond basic `Vec2` operations.
+- Does not contain Canvas 2D-specific functions (context rotation, matrix transforms) — that is `Renderer`'s domain.
+- Does not hold or cache any values between calls; does not provide object pools for reuse.
+- Does not perform runtime validation of arguments (NaN, infinities, wrong types) — correctness is guaranteed by the TypeScript type system at compile time.
+- Does not encapsulate a random number generator with its own seed — uses the global `Math.random()`.
 
-## Публичный интерфейс
+## Public Interface
 
-Тип и фабрика вектора:
+Vector type and factory:
 
-- `type Vec2 = { readonly x: number; readonly y: number }` — иммутабельная пара координат.
-- `vec2(x: number, y: number): Vec2` — фабрика, создающая новый вектор. Эквивалент литерала `{ x, y }`, но удобнее для вызовов.
-- `ZERO: Vec2` — константа `{ x: 0, y: 0 }`, единый экземпляр.
+- `type Vec2 = { readonly x: number; readonly y: number }` — an immutable coordinate pair.
+- `vec2(x: number, y: number): Vec2` — factory creating a new vector. Equivalent to the literal `{ x, y }`, but more convenient in calls.
+- `ZERO: Vec2` — the constant `{ x: 0, y: 0 }`, a single shared instance.
 
-Векторные операции (все возвращают новый `Vec2`, не мутируют входы):
+Vector operations (all return a new `Vec2`, do not mutate inputs):
 
-- `add(a: Vec2, b: Vec2): Vec2` — покомпонентная сумма.
-- `sub(a: Vec2, b: Vec2): Vec2` — покомпонентная разность.
-- `scale(v: Vec2, k: number): Vec2` — умножение на скаляр.
-- `dot(a: Vec2, b: Vec2): number` — скалярное произведение.
-- `length(v: Vec2): number` — длина вектора, `sqrt(x*x + y*y)`.
-- `lengthSq(v: Vec2): number` — квадрат длины, без `sqrt`, для сравнений расстояний.
-- `normalize(v: Vec2): Vec2` — единичный вектор того же направления; для нулевого вектора возвращает `ZERO` (см. секцию «Обработка ошибок»).
-- `rotate(v: Vec2, angleRad: number): Vec2` — поворот на угол в радианах вокруг начала координат.
-- `fromAngle(angleRad: number, length: number = 1): Vec2` — вектор заданной длины по направлению угла (удобно для «носа» корабля).
-- `distance(a: Vec2, b: Vec2): number` — расстояние между точками.
-- `distanceSq(a: Vec2, b: Vec2): number` — квадрат расстояния, для коллизий.
+- `add(a: Vec2, b: Vec2): Vec2` — component-wise sum.
+- `sub(a: Vec2, b: Vec2): Vec2` — component-wise difference.
+- `scale(v: Vec2, k: number): Vec2` — multiplication by a scalar.
+- `dot(a: Vec2, b: Vec2): number` — dot product.
+- `length(v: Vec2): number` — vector length, `sqrt(x*x + y*y)`.
+- `lengthSq(v: Vec2): number` — squared length, without `sqrt`, for distance comparisons.
+- `normalize(v: Vec2): Vec2` — unit vector of the same direction; for the zero vector returns `ZERO` (see Error Handling).
+- `rotate(v: Vec2, angleRad: number): Vec2` — rotation by an angle in radians around the origin.
+- `fromAngle(angleRad: number, length: number = 1): Vec2` — vector of the given length in the direction of the angle (convenient for the ship's nose direction).
+- `distance(a: Vec2, b: Vec2): number` — distance between two points.
+- `distanceSq(a: Vec2, b: Vec2): number` — squared distance, for collisions.
 
-Скалярные утилиты:
+Scalar utilities:
 
-- `clamp(x: number, min: number, max: number): number` — зажимает число в диапазон.
-- `lerp(a: number, b: number, t: number): number` — линейная интерполяция, `t` не клампится.
-- `wrap(x: number, size: number): number` — неотрицательный модуль: результат всегда в `[0, size)` даже при отрицательном `x`.
-- `wrapVec2(v: Vec2, width: number, height: number): Vec2` — покомпонентный `wrap` для координат на канвасе-торе.
-- `randomRange(min: number, max: number): number` — случайное число с плавающей точкой в `[min, max)`.
-- `randomInt(min: number, max: number): number` — случайное целое в `[min, max]` включительно.
-- `degToRad(deg: number): number`, `radToDeg(rad: number): number` — конвертация углов.
+- `clamp(x: number, min: number, max: number): number` — clamps a number to a range.
+- `lerp(a: number, b: number, t: number): number` — linear interpolation; `t` is not clamped.
+- `wrap(x: number, size: number): number` — non-negative modulus: result is always in `[0, size)` even for negative `x`.
+- `wrapVec2(v: Vec2, width: number, height: number): Vec2` — component-wise `wrap` for coordinates on the canvas-torus.
+- `randomRange(min: number, max: number): number` — a random floating-point number in `[min, max)`.
+- `randomInt(min: number, max: number): number` — a random integer in `[min, max]` inclusive.
+- `degToRad(deg: number): number`, `radToDeg(rad: number): number` — angle conversion.
 
-## Модель данных
+## Data Model
 
-Основной тип — `Vec2`:
+The primary type — `Vec2`:
 
 ```
 type Vec2 = { readonly x: number; readonly y: number }
 ```
 
-Поля:
+Fields:
 
-- `x: number` — горизонтальная координата в пикселях канваса (0 — левый край).
-- `y: number` — вертикальная координата (0 — верхний край, y растёт вниз, как принято в Canvas 2D).
-- Оба поля помечены `readonly` — на уровне типов запрещена мутация вектора после создания.
+- `x: number` — horizontal coordinate in canvas pixels (0 is the left edge).
+- `y: number` — vertical coordinate (0 is the top edge, y grows downward, as is standard in Canvas 2D).
+- Both fields are marked `readonly` — mutation of a vector after creation is forbidden at the type level.
 
-Выбран вариант «объект `{x, y}`», а не «кортеж `[number, number]`» и не «два отдельных параметра `number, number`»:
+The `{ x, y }` object variant was chosen over a "tuple `[number, number]`" or "two separate `number, number` parameters":
 
-- Объект с именованными полями читается в вызовах значительно яснее (`position.x + velocity.x * dt` против `position[0] + velocity[0] * dt`), что важно при большом числе формул физики.
-- Базовый контракт `Entity` из архитектуры уже описывает `position: Vec2, velocity: Vec2` как самостоятельные значения — это естественно ложится на объект-структуру.
-- Два отдельных числа в сигнатурах породили бы в вызывающем коде необходимость постоянно распаковывать/упаковывать значения, что хуже и по читаемости, и по ошибкоустойчивости (легко перепутать порядок).
-- Накладных расходов на создание маленьких объектов при 60 Hz и десятках сущностей — нет; преждевременная оптимизация через кортежи или типизированные массивы не оправдана для этого проекта.
-- Индексы и связи отсутствуют (модуль не имеет состояния); никакой персистентности тоже нет.
+- An object with named fields reads significantly more clearly in calls (`position.x + velocity.x * dt` vs. `position[0] + velocity[0] * dt`), which matters with a large number of physics formulas.
+- The base `Entity` contract from the architecture already describes `position: Vec2, velocity: Vec2` as standalone values — this naturally fits a struct object.
+- Two separate numbers in signatures would force calling code to constantly pack/unpack values, which is worse for both readability and error resistance (easy to mix up the order).
+- The overhead of creating small objects at 60 Hz with tens of entities is negligible; premature optimisation via tuples or typed arrays is not justified for this project.
+- No indexes or relations (the module has no state); no persistence either.
 
-## Ключевые потоки
+## Key Flows
 
-**Поворот вектора `rotate(v, angle)`.** По входящему вектору `{x, y}` и углу в радианах вычисляются `cos` и `sin` угла один раз, затем применяется стандартная формула поворота: новая `x' = x * cos - y * sin`, новая `y' = x * sin + y * cos`. Возвращается новый `Vec2`. Функция используется, например, для построения вектора носа корабля: `fromAngle(ship.heading, 1)` внутри реализуется как `rotate({x: 1, y: 0}, heading)` либо напрямую через `cos`/`sin`.
+**Vector rotation `rotate(v, angle)`.** From the input vector `{x, y}` and the angle in radians, `cos` and `sin` are computed once, then the standard rotation formula is applied: new `x' = x * cos - y * sin`, new `y' = x * sin + y * cos`. A new `Vec2` is returned. The function is used, for example, to build the ship's nose vector: `fromAngle(ship.heading, 1)` is internally implemented as `rotate({x: 1, y: 0}, heading)` or directly via `cos`/`sin`.
 
-**Wrap координат через `wrapVec2(v, width, height)`.** Чтобы сущности бесшовно «переезжали» через край канваса-тора, после обновления `position += velocity * dt` вызывается `wrapVec2`. Внутри для каждой компоненты применяется `wrap(x, size)`: `((x % size) + size) % size`. Двойной модуль нужен, потому что `%` в JavaScript для отрицательных чисел даёт отрицательный остаток, а нам нужен неотрицательный результат в `[0, size)`. Итог — позиция всегда корректно «оборачивается» вне зависимости от того, насколько далеко сущность ушла за край (и при чрезмерно больших скоростях тоже).
+**Coordinate wrap via `wrapVec2(v, width, height)`.** For entities to seamlessly "cross" the canvas-torus edge, after updating `position += velocity * dt`, `wrapVec2` is called. Internally `wrap(x, size)` is applied to each component: `((x % size) + size) % size`. The double modulus is needed because `%` in JavaScript gives a negative remainder for negative numbers, and we need a non-negative result in `[0, size)`. The result — position is always correctly "wrapped" regardless of how far the entity went past the edge (and even at excessive speeds).
 
-**Нормализация `normalize(v)`.** Вычисляется `len = length(v)`; если `len` равен нулю (или очень близок к нему — ниже фиксированного `EPSILON`, например `1e-9`), возвращается `ZERO`, чтобы избежать деления на ноль и `NaN`-заражения игрового состояния. Иначе возвращается `{ x: v.x / len, y: v.y / len }`.
+**Normalisation `normalize(v)`.** `len = length(v)` is computed; if `len` is zero (or very close to zero — below a fixed `EPSILON`, e.g. `1e-9`), `ZERO` is returned to avoid division by zero and `NaN` contamination of the game state. Otherwise `{ x: v.x / len, y: v.y / len }` is returned.
 
-**Генерация случайной точки на экране.** `WaveManager` при создании астероидов вызывает `vec2(randomRange(0, width), randomRange(0, height))`; `Ship.hyperspace()` использует ту же комбинацию для выбора случайной новой позиции. Никакого состояния между вызовами нет — каждый вызов независим.
+**Generating a random point on screen.** `WaveManager` when creating asteroids calls `vec2(randomRange(0, width), randomRange(0, height))`; `Ship.hyperspace()` uses the same combination for choosing a random new position. No state between calls — each call is independent.
 
-## Зависимости
+## Dependencies
 
-Нет. Модуль не импортирует ничего, кроме встроенных в язык `Math.*` и `Math.random`. Его, напротив, импортируют практически все остальные модули проекта: `Entity`, `Ship`, `Asteroid`, `Bullet`, `Ufo`, `Particle`, `CollisionSystem`, `WaveManager`, `Renderer`.
+None. The module imports nothing beyond the language's built-in `Math.*` and `Math.random`. It is, conversely, imported by virtually every other module in the project: `Entity`, `Ship`, `Asteroid`, `Bullet`, `Ufo`, `Particle`, `CollisionSystem`, `WaveManager`, `Renderer`.
 
-## Обработка ошибок
+## Error Handling
 
-- **Деление на ноль при `normalize` нулевого вектора.** Сценарий: корабль стоит на месте, `velocity = {x: 0, y: 0}`, и какой-то код зачем-то запрашивает направление движения. Реакция: функция возвращает `ZERO` вместо `NaN`-вектора. Это защищает физику от «заражения» `NaN` — один `NaN` в позиции мгновенно ломает все последующие вычисления и коллизии на много кадров вперёд. Порог сравнения — маленький `EPSILON`, чтобы ловить и формальный ноль, и практически-ноль от накопленной плавающей ошибки.
-- **`wrap(x, size)` при `size <= 0`.** Сценарий считается невозможным по контракту типов (размер канваса всегда положительное число); рантайм-проверки нет, при `size === 0` результатом будет `NaN` — это допустимый fail-fast в dev-сборке, который сразу всплывёт в верхнеуровневом try/catch игрового цикла.
-- **`randomInt(min, max)` при `min > max`.** Контрактное нарушение, рантайм-проверок нет. Поведение — неопределённое (может вернуть `min` или что-то за пределами ожиданий); корректность обеспечивается вызывающей стороной.
-- **Невалидные числа на входе (`NaN`, `Infinity`).** Не фильтруются. Модуль прозрачно пропускает их через себя; предполагается, что `NaN` в векторах — это баг вызывающего кода, и его надо ловить там, а не затенять здесь.
-- **Downstream failure, partial success** — неприменимо: модуль синхронный, без I/O, без асинхронности, без внешних зависимостей.
+- **Division by zero when `normalize` is called on the zero vector.** Scenario: the ship is stationary, `velocity = {x: 0, y: 0}`, and some code asks for its direction of movement. Response: the function returns `ZERO` instead of a `NaN` vector. This protects the physics from `NaN` "infection" — a single `NaN` in a position immediately corrupts all subsequent calculations and collisions for many frames. The comparison threshold is a small `EPSILON` to catch both the formal zero and a practical zero from accumulated floating-point error.
+- **`wrap(x, size)` when `size <= 0`.** This scenario is considered impossible by the type contract (canvas size is always a positive number); there is no runtime check. With `size === 0` the result will be `NaN` — an acceptable fail-fast in a dev build that will immediately surface in the game loop's top-level try/catch.
+- **`randomInt(min, max)` when `min > max`.** A contract violation; no runtime checks. Behaviour is undefined (may return `min` or something out of range); correctness is the caller's responsibility.
+- **Invalid numbers on input (`NaN`, `Infinity`).** Not filtered. The module passes them through transparently; `NaN` in vectors is assumed to be a bug in the calling code and should be caught there, not obscured here.
+- **Downstream failure, partial success** — not applicable: the module is synchronous with no I/O, no async, and no external dependencies.
 
-Наружу ошибок модуль не выбрасывает: исключений не кидает, только возвращает значения.
+The module throws no errors externally: it throws no exceptions, only returns values.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript (ES2022 target).** Язык задан архитектурой. `readonly`-поля `Vec2` обеспечивают иммутабельность на уровне типов.
-- **Никаких внешних библиотек** (`gl-matrix`, `vec2`, `ramda` и т.п.). Объём кода модуля — десятки строк; тянуть зависимость ради пяти формул бессмысленно, плюс это удерживает размер бандла минимальным.
-- **Только `Math.*` из стандартной библиотеки** — `Math.sin/cos/sqrt/abs/floor/random/PI`. Этого достаточно для всех операций.
-- **Без рантайм-валидации аргументов.** Никаких `if (typeof x !== 'number') throw` — корректность типов обеспечивает компилятор TS. В dev-сборке некорректные входы проявятся как `NaN` в состоянии игры и будут пойманы визуально или через верхнеуровневый try/catch.
-- **Без пула объектов.** Каждая операция возвращает новый `Vec2`-литерал. GC-давление на этом масштабе (десятки сущностей × несколько векторных операций за тик × 60 Hz) пренебрежимо мало и не стоит потери читаемости от мутабельного API.
+- **TypeScript (ES2022 target).** Language dictated by the architecture. `readonly` fields on `Vec2` enforce immutability at the type level.
+- **No external libraries** (`gl-matrix`, `vec2`, `ramda`, etc.). The module code is tens of lines; pulling in a dependency for five formulas is pointless, and it keeps the bundle size minimal.
+- **Only `Math.*` from the standard library** — `Math.sin/cos/sqrt/abs/floor/random/PI`. Sufficient for all operations.
+- **No runtime argument validation.** No `if (typeof x !== 'number') throw` — the compiler enforces type correctness. In a dev build, invalid inputs will manifest as `NaN` in game state and will be caught visually or by the top-level try/catch.
+- **No object pool.** Each operation returns a new `Vec2` literal. GC pressure at this scale (tens of entities × a few vector ops per tick × 60 Hz) is negligible and is not worth the loss of readability from a mutable API.
 
-## Конфигурация
+## Configuration
 
-Модуль не читает переменные окружения и не имеет настроек извне. Единственные внутренние константы:
+The module does not read environment variables and has no external settings. The only internal constants:
 
-- `EPSILON: number` — порог для сравнения длины вектора с нулём в `normalize`. Значение по умолчанию — `1e-9`. Назначение — избежать деления на ноль при численно близких к нулю векторах.
-- `ZERO: Vec2` — константа-синглтон `{ x: 0, y: 0 }`. Назначение — общий «нулевой» вектор для возврата из `normalize(0)` и сравнений.
+- `EPSILON: number` — threshold for comparing a vector's length to zero in `normalize`. Default value — `1e-9`. Purpose — avoid division by zero with numerically near-zero vectors.
+- `ZERO: Vec2` — the singleton constant `{ x: 0, y: 0 }`. Purpose — a common "zero" vector for returning from `normalize(0)` and for comparisons.
 
-Секретов, env-переменных, внешних сервисов нет.
+No secrets, env variables, or external services.
 
-## Открытые вопросы
+## Open Questions
 
-- Нужно ли выделить отдельную константу `TAU = 2 * Math.PI` в этом модуле или оставить использование `Math.PI * 2` на местах вызова. Решим, если в коде сущностей обнаружится частое повторение.
-- Порог `EPSILON = 1e-9` — подобран «на глаз»; при появлении численных артефактов в физике (например, дрожание стоящего корабля) может потребоваться увеличить до `1e-6`.
-- Имя `wrap` короткое и потенциально конфликтует с привычной семантикой в других библиотеках; возможно, переименовать в `wrapMod` или `wrapUnsigned` для ясности. Решение — после первого прохода по коду вызывающих модулей.
-- Добавлять ли `clampVec2(v, min, max)` и `lerpVec2(a, b, t)` как отдельные функции, или оставить клиенту составлять их из скалярных версий. Пока не добавляем — в архитектуре прямых потребителей не видно.
+- Whether to define a separate `TAU = 2 * Math.PI` constant in this module or leave `Math.PI * 2` at call sites. Will be decided if frequent repetition appears in entity code.
+- The threshold `EPSILON = 1e-9` — chosen by intuition; if numerical artefacts appear in physics (e.g. a stationary ship drifting), it may need to be raised to `1e-6`.
+- The name `wrap` is short and potentially conflicts with the familiar semantics in other libraries; possibly rename to `wrapMod` or `wrapUnsigned` for clarity. Decision — after the first pass through calling modules' code.
+- Whether to add `clampVec2(v, min, max)` and `lerpVec2(a, b, t)` as separate functions, or let clients compose them from the scalar versions. For now not added — no direct consumers visible in the architecture.

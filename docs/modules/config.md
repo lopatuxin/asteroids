@@ -1,167 +1,167 @@
-# Модуль `config`
+# Module `config`
 
-## Назначение
-Единая точка истины для всех числовых констант игры и таблицы биндингов клавиатуры. Сюда вынесено всё, что подлежит тюнингу баланса (скорости, размеры, кулдауны, очки, пороги волн), чтобы правки баланса сводились к редактированию одного файла без риска расползтись по коду. Без этого модуля «магические числа» расплылись бы по сущностям и сценам, и баланс стал бы нетрассируемым.
+## Purpose
+The single source of truth for all numeric game constants and the keyboard binding table. Everything subject to balance tuning (speeds, sizes, cooldowns, points, wave thresholds) is placed here, so balance changes reduce to editing one file without risking scattered "magic numbers" across the codebase. Without this module those numbers would spread across entities and scenes, making balance untraceable.
 
-## Ответственности
-- Экспорт именованных числовых/строковых констант, сгруппированных по подсистемам (Canvas, Simulation, Ship, Bullet, Asteroid, Ufo, Wave, Scoring).
-- Экспорт перечисления абстрактных действий `Action` и таблицы биндингов `INPUT_BINDINGS: Record<string, Action>`.
-- Фиксация стартовых значений баланса, согласованных с каноничным Asteroids 1979.
-- Служить единственным источником тюнинга — любой параметр баланса правится только здесь.
+## Responsibilities
+- Exporting named numeric/string constants, grouped by subsystem (Canvas, Simulation, Ship, Bullet, Asteroid, Ufo, Wave, Scoring).
+- Exporting the abstract action enum `Action` and the binding table `INPUT_BINDINGS: Record<string, Action>`.
+- Fixing starting balance values aligned with canonical Asteroids 1979.
+- Serving as the sole tuning source — every balance parameter is changed only here.
 
-### Не-ответственности
-- Не хранит рантайм-состояние (не знает про текущую волну, очки, жизни игрока).
-- Не содержит игровой логики (не считает физику, не спавнит сущности, не разрешает коллизии).
-- Не читает значения из внешних источников (нет env-переменных, нет `localStorage`, нет query-параметров).
-- Не предоставляет механизмов переопределения в рантайме (никаких setter-ов, никакого reload).
-- Не отвечает за обработку событий клавиатуры — только описывает маппинг, читает его `InputSystem`.
+### Non-Responsibilities
+- Does not hold runtime state (does not know about current wave, score, or player lives).
+- Does not contain game logic (no physics, no entity spawning, no collision resolution).
+- Does not read values from external sources (no env vars, no `localStorage`, no query params).
+- Does not provide runtime override mechanisms (no setters, no reload).
+- Does not handle keyboard events — only describes the mapping, which is read by `InputSystem`.
 
-## Публичный интерфейс
-Всё — именованные экспорты из `src/config.ts`. Состояния и функций нет.
+## Public Interface
+Everything — named exports from `src/config.ts`. No state or functions.
 
-- `CANVAS` — объект с размерами области отрисовки.
-- `SIMULATION` — параметры игрового цикла (частота, шаг).
-- `SHIP` — параметры корабля игрока.
-- `BULLET` — параметры пули.
-- `ASTEROID` — параметры астероидов по размерам.
-- `UFO` — параметры НЛО по типам.
-- `WAVE` — параметры волн и спавна НЛО.
-- `SCORING` — параметры очков, жизней и таблицы рекордов.
-- `Action` — перечисление абстрактных действий игрока.
-- `INPUT_BINDINGS` — таблица `keyCode → Action`.
+- `CANVAS` — object with rendering area dimensions.
+- `SIMULATION` — game loop parameters (frequency, step).
+- `SHIP` — player ship parameters.
+- `BULLET` — bullet parameters.
+- `ASTEROID` — asteroid parameters by size.
+- `UFO` — UFO parameters by type.
+- `WAVE` — wave and UFO spawn parameters.
+- `SCORING` — scoring, lives, and high-score table parameters.
+- `Action` — enum of abstract player actions.
+- `INPUT_BINDINGS` — `keyCode → Action` table.
 
-Каждый объект — `as const`, чтобы TypeScript выводил литеральные типы и запрещал мутации.
+Every object is `as const` so TypeScript infers literal types and prohibits mutations.
 
-## Модель данных
-Модуль не владеет данными в смысле БД; ниже — форма экспортируемых структур.
+## Data Model
+The module owns no data in the DB sense; below is the shape of exported structures.
 
 **`CANVAS`**
-| Поле | Тип | Значение | Назначение |
+| Field | Type | Value | Purpose |
 |---|---|---|---|
-| `WIDTH` | number | `960` | ширина игрового поля в пикселях |
-| `HEIGHT` | number | `720` | высота игрового поля в пикселях |
+| `WIDTH` | number | `960` | game field width in pixels |
+| `HEIGHT` | number | `720` | game field height in pixels |
 
 **`SIMULATION`**
-| Поле | Тип | Значение | Назначение |
+| Field | Type | Value | Purpose |
 |---|---|---|---|
-| `HZ` | number | `60` | частота симуляции (тиков в секунду) |
-| `STEP` | number | `1 / 60` | фиксированный шаг `dt` в секундах |
-| `MAX_FRAME_TIME` | number | `0.25` | верхняя граница дельты кадра, защита от «долгов» при фризе |
+| `HZ` | number | `60` | simulation frequency (ticks per second) |
+| `STEP` | number | `1 / 60` | fixed `dt` step in seconds |
+| `MAX_FRAME_TIME` | number | `0.25` | frame delta upper bound, prevents "debt" on freeze |
 
 **`SHIP`**
-| Поле | Тип | Значение | Назначение |
+| Field | Type | Value | Purpose |
 |---|---|---|---|
-| `RADIUS` | number | `12` | радиус коллизии корабля |
-| `MAX_SPEED` | number | `400` | максимум модуля скорости, px/s |
-| `THRUST_ACCEL` | number | `250` | ускорение от тяги, px/s² |
-| `ROTATION_SPEED` | number | `3.5` | угловая скорость поворота, рад/с |
-| `FRICTION` | number | `0` | коэффициент трения (0 — чистая инерция оригинала) |
-| `FIRE_COOLDOWN` | number | `0.25` | минимальный интервал между выстрелами, с |
-| `MAX_BULLETS` | number | `4` | одновременно в воздухе не более 4 пуль игрока |
-| `RESPAWN_INVULN_TIME` | number | `2.0` | длительность неуязвимости после респауна, с |
-| `HYPERSPACE_COOLDOWN` | number | `1.0` | кулдаун гиперпространства, с |
-| `HYPERSPACE_FAIL_CHANCE` | number | `0.1` | вероятность «неудачного прыжка» на астероид |
+| `RADIUS` | number | `12` | ship collision radius |
+| `MAX_SPEED` | number | `400` | max speed magnitude, px/s |
+| `THRUST_ACCEL` | number | `250` | thrust acceleration, px/s² |
+| `ROTATION_SPEED` | number | `3.5` | rotation angular velocity, rad/s |
+| `FRICTION` | number | `0` | friction coefficient (0 = pure inertia of the original) |
+| `FIRE_COOLDOWN` | number | `0.25` | minimum interval between shots, s |
+| `MAX_BULLETS` | number | `4` | max bullets in flight simultaneously |
+| `RESPAWN_INVULN_TIME` | number | `2.0` | invulnerability duration after respawn, s |
+| `HYPERSPACE_COOLDOWN` | number | `1.0` | hyperspace cooldown, s |
+| `HYPERSPACE_FAIL_CHANCE` | number | `0.1` | probability of a "failed jump" |
 
 **`BULLET`**
-| Поле | Тип | Значение | Назначение |
+| Field | Type | Value | Purpose |
 |---|---|---|---|
-| `RADIUS` | number | `2` | радиус коллизии пули |
-| `SPEED` | number | `600` | скорость пули, px/s |
-| `LIFETIME` | number | `1.0` | время жизни, с (ограничивает дальность) |
+| `RADIUS` | number | `2` | bullet collision radius |
+| `SPEED` | number | `600` | bullet speed, px/s |
+| `LIFETIME` | number | `1.0` | lifetime in seconds (limits range) |
 
 **`ASTEROID`**
-| Поле | Тип | Значение | Назначение |
+| Field | Type | Value | Purpose |
 |---|---|---|---|
-| `RADIUS.large` | number | `40` | радиус крупного астероида |
-| `RADIUS.medium` | number | `20` | радиус среднего |
-| `RADIUS.small` | number | `10` | радиус мелкого |
-| `SPEED_MIN` | number | `30` | нижняя граница модуля скорости, px/s |
-| `SPEED_MAX` | number | `90` | верхняя граница, px/s |
-| `VERTICES_MIN` | number | `8` | минимум вершин полигона |
-| `VERTICES_MAX` | number | `12` | максимум вершин полигона |
-| `ROUGHNESS` | number | `0.35` | амплитуда шума радиуса вершины (доля от базового) |
-| `POINTS.large` | number | `20` | очки за уничтожение |
-| `POINTS.medium` | number | `50` | очки за уничтожение |
-| `POINTS.small` | number | `100` | очки за уничтожение |
-| `ANGULAR_SPEED_MAX` | number | `1.5` | максимум угловой скорости вращения, рад/с |
+| `RADIUS.large` | number | `40` | large asteroid radius |
+| `RADIUS.medium` | number | `20` | medium radius |
+| `RADIUS.small` | number | `10` | small radius |
+| `SPEED_MIN` | number | `30` | minimum speed magnitude, px/s |
+| `SPEED_MAX` | number | `90` | maximum speed magnitude, px/s |
+| `VERTICES_MIN` | number | `8` | minimum polygon vertices |
+| `VERTICES_MAX` | number | `12` | maximum polygon vertices |
+| `ROUGHNESS` | number | `0.35` | vertex radius noise amplitude (fraction of base) |
+| `POINTS.large` | number | `20` | points for destroying |
+| `POINTS.medium` | number | `50` | points for destroying |
+| `POINTS.small` | number | `100` | points for destroying |
+| `ANGULAR_SPEED_MAX` | number | `1.5` | max rotation angular speed, rad/s |
 
 **`UFO`**
-| Поле | Тип | Значение | Назначение |
+| Field | Type | Value | Purpose |
 |---|---|---|---|
-| `RADIUS.large` | number | `20` | радиус крупного НЛО |
-| `RADIUS.small` | number | `10` | радиус мелкого |
-| `SPEED.large` | number | `120` | скорость крупного, px/s |
-| `SPEED.small` | number | `160` | скорость мелкого, px/s |
-| `DIRECTION_CHANGE_INTERVAL` | number | `1.5` | средний интервал смены курса, с |
-| `FIRE_INTERVAL` | number | `1.2` | средний интервал между выстрелами, с |
-| `SMALL_AIM_ACCURACY` | number | `0.9` | точность прицеливания мелкого НЛО (0..1) |
-| `LARGE_AIM_ACCURACY` | number | `0.3` | точность крупного (стреляет «в сторону игрока») |
-| `POINTS.large` | number | `200` | очки за крупного |
-| `POINTS.small` | number | `1000` | очки за мелкого |
+| `RADIUS.large` | number | `20` | large UFO radius |
+| `RADIUS.small` | number | `10` | small UFO radius |
+| `SPEED.large` | number | `120` | large UFO speed, px/s |
+| `SPEED.small` | number | `160` | small UFO speed, px/s |
+| `DIRECTION_CHANGE_INTERVAL` | number | `1.5` | average course-change interval, s |
+| `FIRE_INTERVAL` | number | `1.2` | average interval between shots, s |
+| `SMALL_AIM_ACCURACY` | number | `0.9` | small UFO aim accuracy (0..1) |
+| `LARGE_AIM_ACCURACY` | number | `0.3` | large UFO accuracy (shoots "toward the player") |
+| `POINTS.large` | number | `200` | points for large UFO |
+| `POINTS.small` | number | `1000` | points for small UFO |
 
 **`WAVE`**
-| Поле | Тип | Значение | Назначение |
+| Field | Type | Value | Purpose |
 |---|---|---|---|
-| `INITIAL_ASTEROIDS` | number | `4` | число крупных астероидов в первой волне |
-| `ASTEROIDS_PER_WAVE_INCREMENT` | number | `2` | прирост за каждую последующую волну |
-| `MAX_ASTEROIDS` | number | `11` | потолок стартового числа астероидов |
-| `START_DELAY` | number | `2.0` | пауза перед началом волны, с |
-| `UFO_SPAWN_CHANCE_BASE` | number | `0.002` | базовая вероятность спавна НЛО за тик |
-| `UFO_SPAWN_CHANCE_PER_WAVE` | number | `0.0005` | прирост вероятности за волну |
-| `UFO_SPAWN_CHANCE_MAX` | number | `0.01` | потолок вероятности |
-| `UFO_SMALL_THRESHOLD_WAVE` | number | `3` | со какой волны появляются мелкие НЛО |
+| `INITIAL_ASTEROIDS` | number | `4` | large asteroids in the first wave |
+| `ASTEROIDS_PER_WAVE_INCREMENT` | number | `2` | increment per subsequent wave |
+| `MAX_ASTEROIDS` | number | `11` | starting asteroid count cap |
+| `START_DELAY` | number | `2.0` | pause before wave starts, s |
+| `UFO_SPAWN_CHANCE_BASE` | number | `0.002` | base UFO spawn probability per tick |
+| `UFO_SPAWN_CHANCE_PER_WAVE` | number | `0.0005` | probability increment per wave |
+| `UFO_SPAWN_CHANCE_MAX` | number | `0.01` | probability cap |
+| `UFO_SMALL_THRESHOLD_WAVE` | number | `3` | wave from which small UFOs appear |
 
 **`SCORING`**
-| Поле | Тип | Значение | Назначение |
+| Field | Type | Value | Purpose |
 |---|---|---|---|
-| `INITIAL_LIVES` | number | `3` | стартовое количество жизней |
-| `BONUS_LIFE_THRESHOLD` | number | `10000` | шаг порога бонусной жизни, очки |
-| `HIGHSCORE_TABLE_SIZE` | number | `10` | длина таблицы рекордов |
-| `HIGHSCORE_NAME_LENGTH` | number | `3` | длина ника игрока в таблице |
-| `HIGHSCORE_STORAGE_KEY` | string | `'asteroids.highscores'` | ключ в `localStorage` |
+| `INITIAL_LIVES` | number | `3` | starting lives count |
+| `BONUS_LIFE_THRESHOLD` | number | `10000` | bonus life score step |
+| `HIGHSCORE_TABLE_SIZE` | number | `10` | high-score table length |
+| `HIGHSCORE_NAME_LENGTH` | number | `3` | player name length in table |
+| `HIGHSCORE_STORAGE_KEY` | string | `'asteroids.highscores'` | `localStorage` key |
 
-**`Action`** — строковое перечисление:
+**`Action`** — string enum:
 `RotateLeft`, `RotateRight`, `Thrust`, `Fire`, `Hyperspace`, `Pause`, `Confirm`.
 
 **`INPUT_BINDINGS`** — `Record<string, Action>`:
-| keyCode | Action | Комментарий |
+| keyCode | Action | Comment |
 |---|---|---|
-| `ArrowLeft` | `RotateLeft` | первичное управление |
-| `ArrowRight` | `RotateRight` | первичное управление |
-| `ArrowUp` | `Thrust` | тяга |
-| `Space` | `Fire` | выстрел |
-| `ShiftLeft` | `Hyperspace` | гиперпространство |
-| `ShiftRight` | `Hyperspace` | дубль |
-| `Escape` | `Pause` | пауза |
-| `KeyP` | `Pause` | альтернативная пауза |
-| `Enter` | `Confirm` | подтверждение в меню / game over |
+| `ArrowLeft` | `RotateLeft` | primary control |
+| `ArrowRight` | `RotateRight` | primary control |
+| `ArrowUp` | `Thrust` | thrust |
+| `Space` | `Fire` | fire |
+| `ShiftLeft` | `Hyperspace` | hyperspace |
+| `ShiftRight` | `Hyperspace` | duplicate |
+| `Escape` | `Pause` | pause |
+| `KeyP` | `Pause` | alternative pause |
+| `Enter` | `Confirm` | confirm in menu / game over |
 
-## Ключевые потоки
-1. **Импорт константы сущностью.** `Ship.ts` при `import { SHIP, SIMULATION } from './config'` получает статические значения; при старте игры использует `SHIP.MAX_SPEED` для клампа скорости и `SIMULATION.STEP` для расчёта тяги. Никаких вызовов не делает — данные готовы на этапе модульной загрузки.
-2. **Маппинг ввода.** `InputSystem` при старте копирует `INPUT_BINDINGS` в свою внутреннюю таблицу; при `keydown` смотрит `event.code` в этой таблице, получает `Action` и обновляет состояние зажатых действий. Модуль `config` при этом только читается.
-3. **Расчёт спавна НЛО.** `WaveManager` на каждом тике вычисляет вероятность `min(UFO_SPAWN_CHANCE_MAX, UFO_SPAWN_CHANCE_BASE + wave * UFO_SPAWN_CHANCE_PER_WAVE)` и сравнивает со случайным числом — решает, спавнить ли НЛО. Все три константы берутся из `WAVE`.
-4. **Начисление очков и бонусной жизни.** При уничтожении астероида `Scoring.addPoints` смотрит `ASTEROID.POINTS[size]` и прибавляет к счёту; затем проверяет, пересёк ли счёт очередной кратный `SCORING.BONUS_LIFE_THRESHOLD` порог — и если да, увеличивает жизни на 1.
+## Key Flows
+1. **Entity imports a constant.** `Ship.ts` via `import { SHIP, SIMULATION } from './config'` gets static values; at game start it uses `SHIP.MAX_SPEED` to clamp speed and `SIMULATION.STEP` to compute thrust. No calls made — data is ready at module load time.
+2. **Input mapping.** `InputSystem` on startup copies `INPUT_BINDINGS` into its internal table; on `keydown` it looks up `event.code` in that table, gets an `Action`, and updates the held-actions state. The `config` module is only read.
+3. **UFO spawn calculation.** `WaveManager` each tick computes `min(UFO_SPAWN_CHANCE_MAX, UFO_SPAWN_CHANCE_BASE + wave * UFO_SPAWN_CHANCE_PER_WAVE)` and compares to a random number — decides whether to spawn a UFO. All three constants come from `WAVE`.
+4. **Score and bonus life award.** On asteroid destruction `Scoring.addPoints` looks up `ASTEROID.POINTS[size]` and adds to the score; then checks if the score crossed the next multiple of `SCORING.BONUS_LIFE_THRESHOLD` — if so, increments lives by 1.
 
-## Зависимости
-Нет. Модуль — листовой: ни одного `import` из других модулей проекта, ни одного обращения к браузерным API. Это намеренное свойство, чтобы `config` можно было импортировать откуда угодно без риска кольцевых зависимостей.
+## Dependencies
+None. The module is a leaf: no imports from other project modules, no browser API calls. This is intentional so that `config` can be imported from anywhere without risk of circular dependencies.
 
-## Обработка ошибок
-Модуль — чистые данные, генерировать ошибки в рантайме не может. Защитные меры — на уровне компиляции:
-- Все объекты помечены `as const`, мутация на этапе TS-проверки запрещена.
-- Значения — литералы, опечатки и некорректные типы ловятся компилятором.
-- Структурная целостность (наличие полей для всех размеров астероида, всех типов НЛО, всех `Action`) гарантируется явными типами: `Record<AsteroidSize, number>`, `Record<UfoKind, number>` и т. п. — пропуск поля даёт ошибку компиляции.
-- Невалидный `keyCode` в `INPUT_BINDINGS` (например, опечатка) не ловится статически, но приводит лишь к тому, что соответствующая клавиша не сработает — graceful degradation на стороне `InputSystem`.
+## Error Handling
+The module is pure data and cannot generate runtime errors. Safeguards are at the compilation level:
+- All objects are marked `as const`; mutation is prohibited by TS type checking.
+- Values are literals; typos and incorrect types are caught by the compiler.
+- Structural integrity (fields for all asteroid sizes, all UFO types, all `Action` values) is guaranteed by explicit types: `Record<AsteroidSize, number>`, `Record<UfoKind, number>`, etc. — a missing field gives a compile error.
+- An invalid `keyCode` in `INPUT_BINDINGS` (e.g. a typo) is not caught statically but only causes the corresponding key to have no effect — graceful degradation on the `InputSystem` side.
 
-Downstream-сбоев у модуля нет (нет вызовов наружу). Частичного успеха тоже нет — модуль либо загружен целиком, либо приложение не стартовало.
+No downstream failures (no outgoing calls). No partial success — the module is either fully loaded or the application has not started.
 
-## Стек и библиотеки
-- **TypeScript, без зависимостей.** Язык определён архитектурой; здесь — ровно одно решение: использовать `as const` и явные типы (`Record<K, V>`) для неизменяемости и структурной проверки. Никакие библиотеки (zod, io-ts) не нужны — значения известны на этапе сборки, валидировать нечего.
+## Stack & Libraries
+- **TypeScript, no dependencies.** Language defined by architecture; the only decision here: use `as const` and explicit types (`Record<K, V>`) for immutability and structural checking. No libraries (zod, io-ts) needed — values are known at build time, nothing to validate.
 
-## Конфигурация
-Внешней конфигурации модуль не имеет — сам по себе и есть конфигурация. Нет env-переменных, секретов, настроек рантайма. Единственный способ изменить поведение — отредактировать файл и пересобрать бандл.
+## Configuration
+The module has no external configuration — it is itself the configuration. No env vars, secrets, or runtime settings. The only way to change behavior is to edit the file and rebuild the bundle.
 
-## Открытые вопросы
-- Точные числовые значения баланса — ориентировочные, подлежат тюнингу после первой играбельной сборки (особенно `THRUST_ACCEL`, `MAX_SPEED`, `ASTEROID.SPEED_MAX`, `UFO_SPAWN_CHANCE_*`).
-- Нужен ли альтернативный набор биндингов WASD параллельно стрелкам — решение отложено до модуля `InputSystem` (см. открытые вопросы в `architecture.md`).
-- Стоит ли выделить отдельную группу `PARTICLE` (LIFETIME, COUNT_PER_EXPLOSION, SPEED_RANGE) сразу или дождаться реализации particle-эффектов — пока вне MVP-контура этого модуля.
-- Разделять ли `DIRECTION_CHANGE_INTERVAL` и `FIRE_INTERVAL` НЛО по типам (large/small) — в каноне мелкий агрессивнее; если выяснится, что единых значений мало, структуру придётся расширить.
+## Open Questions
+- Exact numeric balance values are approximate, subject to tuning after the first playable build (especially `THRUST_ACCEL`, `MAX_SPEED`, `ASTEROID.SPEED_MAX`, `UFO_SPAWN_CHANCE_*`).
+- Whether to add an alternative WASD binding set alongside arrows — deferred to the `InputSystem` module.
+- Whether to add a separate `PARTICLE` group (LIFETIME, COUNT_PER_EXPLOSION, SPEED_RANGE) now or wait for particle effect implementation — currently outside the MVP scope of this module.
+- Whether to split `DIRECTION_CHANGE_INTERVAL` and `FIRE_INTERVAL` by UFO type (large/small) — in the canon, the small is more aggressive; if single values prove insufficient, the structure will be extended.

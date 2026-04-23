@@ -1,156 +1,156 @@
-# Модуль `ship`
+# Module `ship`
 
-## Назначение
+## Purpose
 
-Модуль определяет класс `Ship extends Entity` — корабль игрока, единственную активно управляемую с клавиатуры сущность в мире. Он инкапсулирует всё специфическое для игрока поведение: поворот, тягу по направлению носа с учётом инерции оригинала (без трения), стрельбу с кулдауном и ограничением одновременно летящих пуль, гиперпространство с риском «неудачного прыжка», неуязвимость после респауна и визуальные индикаторы этих состояний (язычок пламени при тяге, мигание при неуязвимости). Без этого модуля `GameScene` пришлось бы обслуживать игрока индивидуальным кодом, что ломает единообразный контракт `Entity` и разносит игровую логику по сцене.
+The module defines the `Ship extends Entity` class — the player's ship, the only entity actively controlled from the keyboard in the world. It encapsulates all player-specific behaviour: rotation, thrust along the nose direction with the inertia of the original (no friction), firing with a cooldown and simultaneous bullet cap, hyperspace with the risk of a "failed jump", post-respawn invulnerability, and visual indicators of these states (thruster flame, blinking during invulnerability). Without this module `GameScene` would have to serve the player with individual code, breaking the uniform `Entity` contract and scattering game logic across the scene.
 
-## Ответственности
+## Responsibilities
 
-- Хранение состояния, специфичного для корабля игрока: угол поворота `heading`, флаг `thrusting`, таймеры `fireCooldown`, `hyperspaceCooldown`, момент окончания неуязвимости `invulnUntil`, счётчик активных пуль игрока `bulletsInFlight`.
-- Реализация управляющего API: `rotate(dir, dt)`, `setThrust(on)`, `fire(): Bullet|null`, `hyperspace(): void`, `respawn(centerPos)`.
-- Физика шага (`update(dt)`): применение тяги по вектору носа, клиппинг скорости по `SHIP.MAX_SPEED`, интегрирование позиции через `integrate(dt)` из `Entity`, декремент таймеров кулдаунов.
-- Отрисовка (`draw(ctx)`): треугольник линиями по трём вершинам, пламя при тяге (мерцание), мигание в режиме неуязвимости (отрисовка через кадр).
-- Обратный колбек `onBulletExpired()` — декремент `bulletsInFlight` при «смерти» пули игрока; вызывается `World`/`Bullet`-инфраструктурой, чтобы корабль знал, когда слот освободился.
-- Гиперспейс-flow: выбор случайной позиции в границах канваса, вероятностная «авария» (смерть на месте), обнуление скорости, установка кулдауна.
+- Storing player-ship-specific state: rotation angle `heading`, the `thrusting` flag, timers `fireCooldown`, `hyperspaceCooldown`, the end-of-invulnerability timestamp `invulnUntil`, and the active bullet counter `bulletsInFlight`.
+- Implementing the control API: `rotate(dir, dt)`, `setThrust(on)`, `fire(): Bullet|null`, `hyperspace(): void`, `respawn(centerPos)`.
+- Physics step (`update(dt)`): applying thrust along the nose vector, clamping speed to `SHIP.MAX_SPEED`, integrating position via `integrate(dt)` from `Entity`, decrementing cooldown timers.
+- Rendering (`draw(ctx)`): triangle drawn with three-vertex lines, thruster flame (flickering), blinking in invulnerability mode (draw every other frame).
+- Reverse callback `onBulletExpired()` — decrements `bulletsInFlight` when a player bullet dies; called by the `World`/`Bullet` infrastructure so the ship knows when a slot is freed.
+- Hyperspace flow: choosing a random position within canvas bounds, probabilistic "accident" (death on the spot), zeroing velocity, setting the cooldown.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не слушает события клавиатуры — `InputSystem` транслирует нажатия в вызовы `rotate/setThrust/fire/hyperspace`. `Ship` знает только свой собственный API.
-- Не хранит и не отрисовывает пули — создаёт экземпляр `Bullet` в `fire()` и возвращает его; хранение и обновление пуль — на стороне `World`.
-- Не выполняет коллизии — проверка пересечений круга корабля с астероидами/НЛО/пулями НЛО делегирована `CollisionSystem`. Корабль только предоставляет `position`, `radius` и проверку `isInvulnerable(now)` как данные.
-- Не начисляет очки и не списывает жизни — это зона `Scoring` в `GameScene`.
-- Не решает, когда респаунить: это зона `GameScene` (после потери жизни и истечения задержки). Метод `respawn` только приводит объект в «новое» состояние.
-- Не отвечает за wrap-around координат — это делает `Entity.integrate(dt)` через `wrapVec2`.
-- Не рисует HUD (жизни, счёт) — только сам корабль.
-- Не содержит рантайм-валидации: недопустимые значения (`dir` вне `-1|0|1`) ловятся типами TS на стороне вызывающего.
+- Does not listen to keyboard events — `InputSystem` translates presses into calls to `rotate/setThrust/fire/hyperspace`. `Ship` knows only its own API.
+- Does not store or render bullets — creates a `Bullet` instance in `fire()` and returns it; storing and updating bullets is `World`'s responsibility.
+- Does not perform collisions — intersection checks between the ship's circle and asteroids/UFOs/UFO bullets are delegated to `CollisionSystem`. The ship only exposes `position`, `radius`, and the `isInvulnerable(now)` check as data.
+- Does not award points or deduct lives — that is `Scoring`'s domain in `GameScene`.
+- Does not decide when to respawn: that is `GameScene`'s domain (after life loss and the delay timer expires). The `respawn` method only brings the object into a "fresh" state.
+- Does not handle coordinate wrap-around — that is done by `Entity.integrate(dt)` via `wrapVec2`.
+- Does not draw the HUD (lives, score) — only the ship itself.
+- Contains no runtime validation: invalid values (`dir` outside `-1|0|1`) are caught by TS types on the caller's side.
 
-## Публичный интерфейс
+## Public Interface
 
-Единственный экспорт — класс `Ship`, наследующий `Entity`.
+The sole export is the class `Ship`, inheriting from `Entity`.
 
-Поля экземпляра (в дополнение к полям `Entity`):
+Instance fields (beyond `Entity` fields):
 
-- `heading: number` — угол поворота носа корабля в радианах. `0` — нос направлен вправо, положительное направление — по часовой стрелке (ось Y в Canvas растёт вниз).
-- `thrusting: boolean` — включена ли тяга в текущем тике. Устанавливается `setThrust`, читается в `update` и `draw`.
-- `fireCooldown: number` — время в секундах до готовности следующего выстрела. Декрементируется в `update(dt)` до нуля.
-- `invulnUntil: number` — timestamp симуляции (в секундах накопленного игрового времени), до которого корабль неуязвим. Используется `CollisionSystem`/`GameScene` для игнорирования столкновений.
-- `hyperspaceCooldown: number` — время в секундах до готовности следующего прыжка; декрементируется в `update`.
-- `bulletsInFlight: number` — текущее число живых пуль, выпущенных кораблём. Увеличивается в `fire()`, уменьшается через `onBulletExpired()`.
+- `heading: number` — the ship's nose rotation angle in radians. `0` means the nose points right; positive direction is clockwise (the Y axis grows downward in Canvas).
+- `thrusting: boolean` — whether thrust is engaged this tick. Set by `setThrust`, read in `update` and `draw`.
+- `fireCooldown: number` — seconds until the next shot is ready. Decremented in `update(dt)` to zero.
+- `invulnUntil: number` — simulation timestamp (in seconds of accumulated game time) until which the ship is invulnerable. Used by `CollisionSystem`/`GameScene` to ignore collisions.
+- `hyperspaceCooldown: number` — seconds until the next jump is ready; decremented in `update`.
+- `bulletsInFlight: number` — current number of live bullets fired by the ship. Incremented in `fire()`, decremented via `onBulletExpired()`.
 
-Конструктор:
+Constructor:
 
-- `constructor(position: Vec2)` — создаёт корабль в указанной позиции с `velocity = ZERO`, `radius = SHIP.RADIUS`, `heading = -Math.PI/2` (нос вверх), все таймеры — `0`, `bulletsInFlight = 0`, `thrusting = false`. Начальная неуязвимость — через последующий вызов `respawn(pos)` либо её отсутствие (в зависимости от решения `GameScene`).
+- `constructor(position: Vec2)` — creates the ship at the specified position with `velocity = ZERO`, `radius = SHIP.RADIUS`, `heading = -Math.PI/2` (nose pointing up), all timers at `0`, `bulletsInFlight = 0`, `thrusting = false`. Initial invulnerability is set via a subsequent `respawn(pos)` call or not at all (depending on `GameScene`'s decision).
 
-Методы управления (вызываются `GameScene` по командам `InputSystem`):
+Control methods (called by `GameScene` per `InputSystem` commands):
 
-- `rotate(dir: -1 | 0 | 1, dt: number): void` — поворот: `heading += dir * SHIP.ROTATION_SPEED * dt`. `-1` — против часовой, `+1` — по часовой, `0` — no-op (удобно, чтобы всегда вызывать из сцены).
-- `setThrust(on: boolean): void` — переключает флаг `thrusting`. Реальное применение тяги происходит в `update(dt)`.
-- `fire(): Bullet | null` — попытка выстрела. Возвращает новый `Bullet` при успехе или `null` при отказе (см. «Ключевые потоки» и «Обработка ошибок»).
-- `hyperspace(): void` — мгновенный телепорт в случайную точку канваса. Может оставить корабль живым (с обнулённой скоростью и новым кулдауном) либо убить его с вероятностью `SHIP.HYPERSPACE_FAIL_CHANCE`.
-- `respawn(centerPos: Vec2): void` — приводит корабль в состояние «только что появился»: `position = centerPos`, `velocity = ZERO`, `heading = -Math.PI/2`, все таймеры сбрасываются, `invulnUntil = now + SHIP.RESPAWN_INVULN_TIME`, `alive = true`, `thrusting = false`.
-- `onBulletExpired(): void` — уменьшить `bulletsInFlight` на 1 (не ниже нуля). Вызывается, когда пуля игрока становится `alive = false` (попадание или истечение TTL).
+- `rotate(dir: -1 | 0 | 1, dt: number): void` — rotation: `heading += dir * SHIP.ROTATION_SPEED * dt`. `-1` — counter-clockwise, `+1` — clockwise, `0` — no-op (convenient so the scene always calls it unconditionally).
+- `setThrust(on: boolean): void` — toggles the `thrusting` flag. Actual thrust application happens in `update(dt)`.
+- `fire(): Bullet | null` — attempts to fire. Returns a new `Bullet` on success or `null` on failure (see Key Flows and Error Handling).
+- `hyperspace(): void` — instant teleport to a random point on the canvas. May leave the ship alive (with zeroed velocity and a new cooldown) or kill it with probability `SHIP.HYPERSPACE_FAIL_CHANCE`.
+- `respawn(centerPos: Vec2): void` — brings the ship to the "just spawned" state: `position = centerPos`, `velocity = ZERO`, `heading = -Math.PI/2`, all timers reset, `invulnUntil = now + SHIP.RESPAWN_INVULN_TIME`, `alive = true`, `thrusting = false`.
+- `onBulletExpired(): void` — decrements `bulletsInFlight` by 1 (not below zero). Called when a player bullet becomes `alive = false` (hit or TTL expiry).
 
-Перекрытые методы `Entity`:
+Overridden `Entity` methods:
 
-- `update(dt: number): void` — применяет тягу, клиппингует скорость, декрементирует таймеры, вызывает `this.integrate(dt)`.
-- `draw(ctx: CanvasRenderingContext2D): void` — отрисовывает треугольник корабля, пламя тяги, учитывает мигание при неуязвимости.
+- `update(dt: number): void` — applies thrust, clamps speed, decrements timers, calls `this.integrate(dt)`.
+- `draw(ctx: CanvasRenderingContext2D): void` — draws the ship triangle, thruster flame, handles blinking during invulnerability.
 
-Вспомогательное (внутреннее, не обязательное к экспорту):
+Auxiliary (internal, not necessarily exported):
 
-- `isInvulnerable(now: number): boolean` — `now < this.invulnUntil`. Удобно для `CollisionSystem` и `draw`.
+- `isInvulnerable(now: number): boolean` — `now < this.invulnUntil`. Useful for `CollisionSystem` and `draw`.
 
-## Модель данных
+## Data Model
 
-Модуль не владеет БД-таблицами; описывает форму одного объекта в памяти.
+The module owns no DB tables; it describes the shape of one object in memory.
 
-**Поля `Ship` (сверх `Entity`):**
+**`Ship` fields (beyond `Entity`):**
 
-| Поле | Тип | Значение по умолчанию | Назначение |
+| Field | Type | Default | Purpose |
 |---|---|---|---|
-| `heading` | `number` | `-Math.PI / 2` | угол носа в радианах |
-| `thrusting` | `boolean` | `false` | включена ли тяга в этом тике |
-| `fireCooldown` | `number` | `0` | секунды до следующего выстрела |
-| `invulnUntil` | `number` | `0` | timestamp симуляции, до которого неуязвим |
-| `hyperspaceCooldown` | `number` | `0` | секунды до готовности прыжка |
-| `bulletsInFlight` | `number` | `0` | число активных пуль игрока |
+| `heading` | `number` | `-Math.PI / 2` | nose angle in radians |
+| `thrusting` | `boolean` | `false` | whether thrust is engaged this tick |
+| `fireCooldown` | `number` | `0` | seconds until the next shot |
+| `invulnUntil` | `number` | `0` | simulation timestamp until which the ship is invulnerable |
+| `hyperspaceCooldown` | `number` | `0` | seconds until the next jump |
+| `bulletsInFlight` | `number` | `0` | number of active player bullets |
 
-Связи: `Ship` — элемент `World.ship` (`0..1`). Пули, созданные `fire()`, хранятся в `World.bullets` и связаны с кораблём только через счётчик `bulletsInFlight` (обратный колбек `onBulletExpired`).
+Relations: `Ship` is an element of `World.ship` (0..1). Bullets created by `fire()` are stored in `World.bullets` and are connected to the ship only through the `bulletsInFlight` counter (via the `onBulletExpired` callback).
 
-Инвариант: `0 <= bulletsInFlight <= SHIP.MAX_BULLETS`. Поддерживается строго дисциплиной `fire()` (не создаёт пулю при достижении потолка) и `onBulletExpired()` (декрементирует при каждой смерти пули игрока).
+Invariant: `0 <= bulletsInFlight <= SHIP.MAX_BULLETS`. Maintained strictly by `fire()` discipline (does not create a bullet when the cap is reached) and `onBulletExpired()` (decrements on every player bullet death).
 
-Про `now` и время симуляции: корабль получает `now` для `invulnUntil` и `hyperspace` из аккумулированного игрового времени (`GameScene` ведёт `simTime += dt` и передаёт корабль.hyperspace/respawn этот момент). Альтернатива — перевести `invulnUntil` в счётчик-убывание (как `fireCooldown`); решение зафиксировано в «Открытых вопросах».
+On `now` and simulation time: the ship receives `now` for `invulnUntil` and `hyperspace` from the accumulated game time (`GameScene` maintains `simTime += dt` and passes it to `ship.hyperspace`/`respawn`). Alternative — convert `invulnUntil` to a decrement counter (like `fireCooldown`); the decision is noted in Open Questions.
 
-## Ключевые потоки
+## Key Flows
 
-**Обычный тик с тягой и поворотом.** `GameScene` читает `InputSystem.isDown(RotateLeft/RotateRight/Thrust)`. Вызывает `ship.rotate(-1, dt)` / `ship.rotate(+1, dt)` / `ship.rotate(0, dt)` и `ship.setThrust(isDown(Thrust))`. Затем вызывает `ship.update(dt)`: если `thrusting`, вычисляется вектор носа `forward = fromAngle(heading, 1)`, прибавляется к скорости `velocity = velocity + forward * SHIP.THRUST_ACCEL * dt`; длина проверяется и клампится — если `length(velocity) > SHIP.MAX_SPEED`, скорость нормализуется и умножается на `SHIP.MAX_SPEED`. Трения нет (`SHIP.FRICTION = 0`), инерция сохраняется, как в оригинале. Затем декрементируются `fireCooldown` и `hyperspaceCooldown` до нуля (не ниже), и вызывается `this.integrate(dt)` из `Entity` — сдвиг позиции и wrap по канвасу.
+**Normal tick with thrust and rotation.** `GameScene` reads `InputSystem.isDown(RotateLeft/RotateRight/Thrust)`. Calls `ship.rotate(-1, dt)` / `ship.rotate(+1, dt)` / `ship.rotate(0, dt)` and `ship.setThrust(isDown(Thrust))`. Then calls `ship.update(dt)`: if `thrusting`, the nose vector `forward = fromAngle(heading, 1)` is computed and added to velocity: `velocity = velocity + forward * SHIP.THRUST_ACCEL * dt`; the magnitude is checked and clamped — if `length(velocity) > SHIP.MAX_SPEED`, the velocity is normalised and multiplied by `SHIP.MAX_SPEED`. There is no friction (`SHIP.FRICTION = 0`), inertia is preserved as in the original. Then `fireCooldown` and `hyperspaceCooldown` are decremented to zero (no lower), and `this.integrate(dt)` from `Entity` is called — shifting position and wrapping at the canvas edge.
 
-**Выстрел.** `GameScene` на событии `onPressed(Fire)` вызывает `ship.fire()`. Внутри: если `fireCooldown > 0` или `bulletsInFlight >= SHIP.MAX_BULLETS` — возврат `null` (no-op для сцены). Иначе — создаётся вектор направления `forward = fromAngle(heading, 1)`, точка вылета `muzzle = position + forward * SHIP.RADIUS`, скорость пули `bulletVel = velocity + forward * BULLET.SPEED` (наследует скорость корабля, как в оригинале). Конструируется `new Bullet(muzzle, bulletVel, 'ship')`, устанавливается `fireCooldown = SHIP.FIRE_COOLDOWN`, увеличивается `bulletsInFlight += 1`, пуля возвращается сцене, которая добавляет её в `World.bullets`. Когда пуля умирает (по TTL или при попадании), `World`/`Bullet` инфраструктура дёргает `ship.onBulletExpired()` — слот возвращается.
+**Firing.** `GameScene` on the `onPressed(Fire)` event calls `ship.fire()`. Internally: if `fireCooldown > 0` or `bulletsInFlight >= SHIP.MAX_BULLETS` — return `null` (no-op for the scene). Otherwise — the direction vector `forward = fromAngle(heading, 1)` is computed, the muzzle point `muzzle = position + forward * SHIP.RADIUS`, the bullet velocity `bulletVel = velocity + forward * BULLET.SPEED` (inherits the ship's velocity, as in the original). A `new Bullet(muzzle, bulletVel, 'ship')` is constructed, `fireCooldown = SHIP.FIRE_COOLDOWN` is set, `bulletsInFlight += 1` is incremented, and the bullet is returned to the scene, which adds it to `World.bullets`. When the bullet dies (by TTL or on impact), the `World`/`Bullet` infrastructure calls `ship.onBulletExpired()` — the slot is returned.
 
-**Гиперпространство.** `GameScene` на `onPressed(Hyperspace)` вызывает `ship.hyperspace()`. Внутри: если `hyperspaceCooldown > 0` — no-op (без телепорта). Иначе: новая позиция `position = vec2(randomRange(0, CANVAS.WIDTH), randomRange(0, CANVAS.HEIGHT))`; скорость `velocity = ZERO` (экстренный сброс инерции в духе оригинала); `hyperspaceCooldown = SHIP.HYPERSPACE_COOLDOWN`. Затем бросок `Math.random() < SHIP.HYPERSPACE_FAIL_CHANCE`: если выпало — `alive = false` (неудачный прыжок, корабль взрывается на новой позиции; `GameScene` породит частицы и спишет жизнь через обычный пайплайн смерти). Иначе корабль живёт и продолжает двигаться с новой позиции.
+**Hyperspace.** `GameScene` on `onPressed(Hyperspace)` calls `ship.hyperspace()`. Internally: if `hyperspaceCooldown > 0` — no-op (no teleport). Otherwise: new position `position = vec2(randomRange(0, CANVAS.WIDTH), randomRange(0, CANVAS.HEIGHT))`; velocity `velocity = ZERO` (emergency inertia reset in the spirit of the original); `hyperspaceCooldown = SHIP.HYPERSPACE_COOLDOWN`. Then a roll: `Math.random() < SHIP.HYPERSPACE_FAIL_CHANCE`: if triggered — `alive = false` (failed jump, the ship explodes at the new position; `GameScene` will spawn particles and deduct a life through the normal death pipeline). Otherwise the ship lives and continues moving from the new position.
 
-**Респаун после смерти.** `GameScene` детектит, что `ship.alive === false`, спускает жизнь через `Scoring.loseLife()`, ждёт небольшую задержку (на время взрыва-частиц), затем либо делает `ship.respawn(vec2(CANVAS.WIDTH/2, CANVAS.HEIGHT/2))` на существующем экземпляре, либо создаёт новый `Ship` в центре. Конкретный выбор — открытый вопрос (см. ниже); оба варианта семантически эквивалентны при корректной реализации `respawn`. В течение `SHIP.RESPAWN_INVULN_TIME` после респауна `CollisionSystem` пропускает все пары с участием корабля, а `draw` мигает.
+**Respawn after death.** `GameScene` detects `ship.alive === false`, decrements a life via `Scoring.loseLife()`, waits a brief delay (during the explosion particle animation), then either calls `ship.respawn(vec2(CANVAS.WIDTH/2, CANVAS.HEIGHT/2))` on the existing instance or creates a new `Ship` at the centre. The specific choice is an open question (see below); both options are semantically equivalent with a correct `respawn` implementation. During `SHIP.RESPAWN_INVULN_TIME` after respawn, `CollisionSystem` skips all pairs involving the ship, and `draw` blinks.
 
-**Отрисовка.** `ship.draw(ctx)` проверяет неуязвимость: если `isInvulnerable(now)` и `Math.floor(now * BLINK_HZ) % 2 === 0` — возврат без отрисовки (эффект мигания). Иначе строятся три вершины треугольника в локальных координатах (нос, левое крыло, правое крыло; значения — от `SHIP.RADIUS`), поворачиваются на `heading` и смещаются на `position`. Рисуются как замкнутая ломаная. Если `thrusting`, дополнительно рисуется «язычок пламени» позади корабля: небольшой треугольник за кормой, присутствующий через кадр (чередование по глобальному счётчику кадров) или с вероятностью ~0.5 за кадр — эффект мерцания дюзы.
+**Rendering.** `ship.draw(ctx)` checks invulnerability: if `isInvulnerable(now)` and `Math.floor(now * BLINK_HZ) % 2 === 0` — return without drawing (blinking effect). Otherwise three triangle vertices are built in local coordinates (nose, left wing, right wing; values derived from `SHIP.RADIUS`), rotated by `heading`, and shifted by `position`. Drawn as a closed polyline. If `thrusting`, an additional "flame tongue" is drawn behind the ship: a small triangle aft, present every other frame (alternating by a global frame counter) or with ~0.5 probability per frame — thruster flicker effect.
 
-## Зависимости
+## Dependencies
 
-- **`entity`** — наследование от `Entity`, использование защищённого `integrate(dt)` и полей `position`, `velocity`, `radius`, `alive`.
-- **`vec2-math`** — `Vec2`, `vec2`, `ZERO`, `add`, `scale`, `fromAngle`, `length`, `normalize`, `rotate`, `randomRange`. Используются в физике шага, фабрике пули, гиперпространстве, расчёте вершин треугольника.
-- **`config`** — константы `SHIP.*`, `BULLET.SPEED`, `CANVAS.WIDTH/HEIGHT`. Без собственных магических чисел.
-- **`bullet` (import type только)** — `Ship.fire()` возвращает `Bullet | null`. Реальный конструктор `Bullet` импортируется значением (нужен для `new Bullet(...)`). Чтобы избежать кольцевой зависимости, если она возникнет (например, если `Bullet` понадобится знать про `Ship`), можно ограничиться только типом и вынести фабрику пули в отдельный модуль или в сцену. На сегодня цикл не прогнозируется, импорт значения допустим.
-- **Стандартный DOM** — `CanvasRenderingContext2D` как тип параметра `draw`.
+- **`entity`** — inheritance from `Entity`, use of the protected `integrate(dt)` and fields `position`, `velocity`, `radius`, `alive`.
+- **`vec2-math`** — `Vec2`, `vec2`, `ZERO`, `add`, `scale`, `fromAngle`, `length`, `normalize`, `rotate`, `randomRange`. Used in physics step, bullet factory, hyperspace, triangle vertex calculation.
+- **`config`** — constants `SHIP.*`, `BULLET.SPEED`, `CANVAS.WIDTH/HEIGHT`. No magic numbers inside the module.
+- **`bullet` (value import)** — `Ship.fire()` returns `Bullet | null`. The real `Bullet` constructor is imported as a value (needed for `new Bullet(...)`). To avoid a circular dependency, if one arises (e.g. if `Bullet` ever needs to know about `Ship`), only the type can be imported and the bullet factory moved to a separate module or the scene. Currently no cycle is expected; a value import is acceptable.
+- **Standard DOM** — `CanvasRenderingContext2D` as the type parameter for `draw`.
 
-Обратные зависимости: `GameScene`/`World` (владеет экземпляром), `CollisionSystem` (читает `position`, `radius`, может спрашивать `isInvulnerable`), `InputSystem` — опосредованно через сцену.
+Reverse dependencies: `GameScene`/`World` (owns the instance), `CollisionSystem` (reads `position`, `radius`, may call `isInvulnerable`), `InputSystem` — indirectly via the scene.
 
-## Обработка ошибок
+## Error Handling
 
-- **Повторный `fire()` до истечения кулдауна.** Возвращается `null`, никаких побочных эффектов. Сцена просто не добавляет пулю. Это не ошибка, а нормальный режим ограничения скорострельности.
-- **Попытка `fire()` при `bulletsInFlight >= SHIP.MAX_BULLETS`.** Аналогично — `null`, no-op. Оригинал Asteroids ограничивал игрока 4 пулями одновременно; это поведение сохраняется.
-- **Повторный `hyperspace()` до окончания кулдауна.** No-op: корабль остаётся на месте, состояние не меняется. В dev-сборке можно залогировать факт для отладки; в проде — молча игнорируется.
-- **«Неудачный прыжок».** Ожидаемое по контракту поведение: с вероятностью `SHIP.HYPERSPACE_FAIL_CHANCE` корабль становится `alive = false` прямо в новой позиции. `GameScene` обрабатывает это как обычную смерть (анимация, жизнь, респаун) — специальной ветки не требуется.
-- **Некорректный `dir` в `rotate` (например, `2`).** Отсекается системой типов (`-1 | 0 | 1`); в рантайме проверок нет. При обходе типа через `any` произойдёт некорректный поворот — это баг вызывающего.
-- **Несогласованный `bulletsInFlight` (например, забыли вызвать `onBulletExpired`).** Симптом — корабль «не стреляет» после нескольких выстрелов: счётчик достиг потолка и не декрементируется. Защита — дисциплина `World`/`Bullet`: колбек обязателен при любом переходе пули игрока в `alive = false`. Рантайм-контроля нет.
-- **`NaN`/`Infinity` в `heading` или `velocity`.** Проявятся как `NaN`-заражение позиции после `integrate`. Модуль сам их не производит (при условии корректных входов), но и не фильтрует; ловится верхнеуровневым try/catch игрового цикла.
-- **Downstream failure, partial success.** Неприменимо: модуль синхронный, без I/O, без внешних вызовов. Либо метод отработал, либо выбросил исключение на арифметике.
+- **Repeated `fire()` before the cooldown expires.** Returns `null`, no side effects. The scene simply does not add a bullet. This is not an error — it is the normal rate-of-fire limiting mode.
+- **Calling `fire()` when `bulletsInFlight >= SHIP.MAX_BULLETS`.** Similarly — `null`, no-op. The original Asteroids capped the player at 4 simultaneous bullets; this behaviour is preserved.
+- **Repeated `hyperspace()` before the cooldown ends.** No-op: the ship stays in place, state unchanged. In a dev build the fact can be logged for debugging; in prod — silently ignored.
+- **"Failed jump".** Expected contract behaviour: with probability `SHIP.HYPERSPACE_FAIL_CHANCE` the ship becomes `alive = false` at the new position. `GameScene` handles this as a normal death (animation, life loss, respawn) — no special branch is needed.
+- **Invalid `dir` in `rotate` (e.g. `2`).** Cut off by the type system (`-1 | 0 | 1`); no runtime checks. If bypassed via `any`, incorrect rotation occurs — that is a caller bug.
+- **Inconsistent `bulletsInFlight` (e.g. forgot to call `onBulletExpired`).** Symptom — ship "won't fire" after a few shots: the counter reached the cap and is not decremented. Guard — `World`/`Bullet` discipline: the callback is mandatory on any player bullet transition to `alive = false`. No runtime monitoring.
+- **`NaN`/`Infinity` in `heading` or `velocity`.** Will manifest as `NaN` contamination in position after `integrate`. The module does not produce these itself (given correct inputs), but also does not filter them; caught by the game loop's top-level try/catch.
+- **Downstream failure, partial success.** Not applicable: the module is synchronous with no I/O or external calls. Either the method completed or it threw an arithmetic exception.
 
-Наружу собственные исключения не кидаются: все «отказы» (`fire` на кулдауне, `hyperspace` на кулдауне) выражены возвратом `null`/no-op.
+No external exceptions are thrown: all "failures" (`fire` on cooldown, `hyperspace` on cooldown) are expressed as `null` return / no-op.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript (ES2022 target), класс с `extends Entity`.** Язык задан архитектурой. Узкий литеральный тип `-1 | 0 | 1` для `dir` ловит ошибки на вызывающей стороне на этапе компиляции.
-- **Без внешних библиотек.** Весь функционал покрывается `vec2-math` и `config`; физика инерции и триангуляция носа корабля — десятки строк.
-- **Без рантайм-валидации аргументов.** Контракты держит компилятор; некорректные значения проявятся визуально в dev-сборке.
-- **Без пула объектов.** На каждый выстрел создаётся новый `Bullet`; пиковый объём — до `SHIP.MAX_BULLETS` пуль одновременно, GC-давление пренебрежимо.
-- **`Math.random()` напрямую.** Источник случайности для `hyperspace` и мерцания пламени — глобальный `Math.random()` через утилиту `randomRange` из `vec2-math`. Детерминированная симуляция с сидом — вне scope MVP.
+- **TypeScript (ES2022 target), class with `extends Entity`.** Language dictated by the architecture. The narrow literal type `-1 | 0 | 1` for `dir` catches caller errors at compile time.
+- **No external libraries.** All functionality is covered by `vec2-math` and `config`; inertia physics and ship nose triangulation are tens of lines.
+- **No runtime argument validation.** Contracts are held by the compiler; invalid values will manifest visually in a dev build.
+- **No object pool.** A new `Bullet` is created on each shot; the peak volume is up to `SHIP.MAX_BULLETS` simultaneous bullets, GC pressure is negligible.
+- **`Math.random()` directly.** The source of randomness for `hyperspace` and flame flicker is the global `Math.random()` via the `randomRange` utility from `vec2-math`. A deterministic seed-based simulation is out of MVP scope.
 
-## Конфигурация
+## Configuration
 
-Модуль не имеет собственных констант — весь баланс читается из `config`:
+The module has no own constants — all balance values are read from `config`:
 
-- `SHIP.RADIUS` — радиус коллизии и масштаб рисуемого треугольника.
-- `SHIP.MAX_SPEED` — потолок модуля скорости для клампа после тяги.
-- `SHIP.THRUST_ACCEL` — ускорение от тяги, px/s².
-- `SHIP.ROTATION_SPEED` — угловая скорость поворота, рад/с.
-- `SHIP.FIRE_COOLDOWN` — интервал между выстрелами, с.
-- `SHIP.MAX_BULLETS` — потолок одновременно летящих пуль игрока.
-- `SHIP.RESPAWN_INVULN_TIME` — длительность неуязвимости после респауна, с.
-- `SHIP.HYPERSPACE_COOLDOWN` — кулдаун гиперпространства, с.
-- `SHIP.HYPERSPACE_FAIL_CHANCE` — вероятность «неудачного прыжка».
-- `BULLET.SPEED` — начальная скорость пули (используется в `fire`).
-- `CANVAS.WIDTH`, `CANVAS.HEIGHT` — границы случайной точки для `hyperspace`.
+- `SHIP.RADIUS` — collision radius and scale of the drawn triangle.
+- `SHIP.MAX_SPEED` — velocity magnitude cap for post-thrust clamping.
+- `SHIP.THRUST_ACCEL` — thrust acceleration, px/s².
+- `SHIP.ROTATION_SPEED` — angular rotation speed, rad/s.
+- `SHIP.FIRE_COOLDOWN` — interval between shots, s.
+- `SHIP.MAX_BULLETS` — cap on simultaneous player bullets in flight.
+- `SHIP.RESPAWN_INVULN_TIME` — invulnerability duration after respawn, s.
+- `SHIP.HYPERSPACE_COOLDOWN` — hyperspace cooldown, s.
+- `SHIP.HYPERSPACE_FAIL_CHANCE` — probability of a "failed jump".
+- `BULLET.SPEED` — initial bullet speed (used in `fire`).
+- `CANVAS.WIDTH`, `CANVAS.HEIGHT` — bounds for the random hyperspace destination.
 
-Внутренняя константа модуля, не вынесенная в `config`:
+Internal module constant, not promoted to `config`:
 
-- `BLINK_HZ: number` — частота мигания в режиме неуязвимости (например, `10` Гц — 10 переключений видимости в секунду). Кандидат на вынос в `config.SHIP.INVULN_BLINK_HZ`, если будет требоваться тюнинг (см. «Открытые вопросы»).
+- `BLINK_HZ: number` — blink frequency in invulnerability mode (e.g. `10` Hz — 10 visibility toggles per second). A candidate for promotion to `config.SHIP.INVULN_BLINK_HZ` if tuning is ever needed (see Open Questions).
 
-Env-переменных, секретов и рантайм-настроек нет.
+No env variables, secrets, or runtime settings.
 
-## Открытые вопросы
+## Open Questions
 
-- **`invulnUntil` как timestamp vs. счётчик-убывание.** Сейчас `invulnUntil` — момент в симуляционном времени; значит, модуль должен где-то брать `now`. Альтернатива — `invulnRemaining: number`, декрементировать в `update(dt)` как `fireCooldown`. Это исключает необходимость в параметре `now`, но усложняет `respawn` (нужно брать длительность из `config` внутри `respawn`, а не передавать извне). Склоняемся ко второй схеме; решение зафиксируется при реализации.
-- **Respawn: новый экземпляр vs. мутация существующего.** `entity.md` рекомендует «новая сущность = новый экземпляр», но `Ship` уникален (единственный корабль в `World`), и `World.ship` удобнее держать стабильной ссылкой. Текущий API `respawn(centerPos)` предполагает мутацию; возможен пересмотр в пользу `new Ship(centerPos)` с обновлением `World.ship`.
-- **Эффект пламени: детерминированное мерцание через кадр vs. случайное.** Детерминированное — предсказуемо, легче тестируется; случайное — живее выглядит. Пока предполагается чередование по глобальному счётчику кадров; финальный выбор — после визуальной проверки.
-- **`BLINK_HZ` в `config` или как магическая константа модуля.** Решение зависит от того, захочется ли тюнить на этапе балансировки; при необходимости переедет в `config.SHIP`.
-- **Колбек `onBulletExpired` vs. подписка корабля на события пули.** Альтернативы — либо `Bullet` знает про своего владельца и дёргает его, либо `World` на фильтрации мёртвых пуль игрока вызывает колбек, либо вводится мини-шина событий. Простейший вариант — `World` при удалении пули `source === 'ship'` вызывает `ship.onBulletExpired()`. Решится при реализации `Bullet`/`World`.
-- **Скорость пули: абсолютная vs. наследующая скорость корабля.** Канон Asteroids — наследует; это заложено в «Ключевых потоках». Если выяснится, что быстро летящий корабль делает пули почти бесполезными (обгоняет их), перейдём на абсолютную скорость `BULLET.SPEED` без добавления `velocity`.
-- **Гиперпространство без гарантированного «безопасного» места.** В архитектуре и концепте оговорено, что место выбирается случайно, включая возможность появиться на астероиде. Явной проверки «безопасности новой позиции» мы не делаем — «неудача» моделируется только шансом `HYPERSPACE_FAIL_CHANCE`. Если тестирование покажет слишком частые моментальные смерти от спавна на астероиде, добавим дополнительную логику отталкивания или ретрая выбора точки.
+- **`invulnUntil` as a timestamp vs. a decrement counter.** Currently `invulnUntil` is a moment in simulation time; this means the module must obtain `now` from somewhere. Alternative — `invulnRemaining: number`, decremented in `update(dt)` like `fireCooldown`. This eliminates the `now` parameter but complicates `respawn` (the duration must be taken from `config` inside `respawn`, rather than passed in from outside). Leaning toward the second scheme; decision to be finalised during implementation.
+- **Respawn: new instance vs. mutation of existing.** `entity.md` recommends "new entity = new instance", but `Ship` is unique (the single ship in `World`) and `World.ship` is more convenient as a stable reference. The current `respawn(centerPos)` API implies mutation; a revision toward `new Ship(centerPos)` with a `World.ship` update is possible.
+- **Flame effect: deterministic alternating frames vs. random.** Deterministic — predictable, easier to test; random — looks more alive. For now, alternating by a global frame counter is assumed; final choice after a visual check.
+- **`BLINK_HZ` in `config` or as a magic module constant.** Decision depends on whether tuning is needed at the balancing stage; if so, it will be moved to `config.SHIP`.
+- **`onBulletExpired` callback vs. ship subscribing to bullet events.** Alternatives: `Bullet` knows its owner and calls it back, `World` calls the callback when filtering dead player bullets, or a mini event bus is introduced. Simplest — `World` calls `ship.onBulletExpired()` when removing a `source === 'ship'` bullet. Will be resolved during `Bullet`/`World` implementation.
+- **Bullet speed: absolute vs. inheriting ship velocity.** Asteroids canon — inherits; this is baked into Key Flows. If a fast-moving ship makes bullets nearly useless (it outruns them), switching to absolute `BULLET.SPEED` without adding `velocity` will be considered.
+- **Hyperspace without a guaranteed "safe" landing.** The architecture and concept state that the position is chosen randomly, including the possibility of landing on an asteroid. No "safety" check on the new position is performed — "failure" is modelled only by `HYPERSPACE_FAIL_CHANCE`. If testing shows too-frequent instant deaths from spawning on an asteroid, additional deflection logic or a retry for the position will be added.

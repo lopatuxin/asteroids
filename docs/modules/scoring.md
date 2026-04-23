@@ -1,103 +1,103 @@
-# Модуль — Scoring
+# Module — Scoring
 
-## Назначение
+## Purpose
 
-Модуль `Scoring` — единый источник правды о прогрессе текущей партии: сколько очков набрано, сколько жизней осталось, какая волна идёт. Без него `GameScene` не может принимать решения о game over и выдаче бонусных жизней, а HUD не знает, что показывать. Вся логика начисления очков (по таблице) и выдачи бонусных жизней (по порогам) собрана в одном месте, чтобы остальные подсистемы не дублировали баланс.
+The `Scoring` module is the single source of truth about the current session's progress: how many points have been scored, how many lives remain, and which wave is active. Without it, `GameScene` cannot make decisions about game over or awarding bonus lives, and the HUD doesn't know what to display. All score-awarding logic (by table) and bonus life logic (by thresholds) is gathered in one place so that other subsystems don't duplicate balance data.
 
-## Ответственности
+## Responsibilities
 
-- Хранение текущего счёта партии (`score`).
-- Хранение текущего числа жизней (`lives`).
-- Хранение номера текущей волны (`wave`).
-- Начисление очков за уничтожение сущности по её типу и размеру, согласно таблице из `config`.
-- Выдача бонусной жизни при пересечении очередного порога (по умолчанию каждые 10 000 очков).
-- Уменьшение числа жизней при потере корабля и ответ на вопрос «игра окончена?».
-- Инкремент номера волны по запросу `WaveManager`/`GameScene`.
-- Предоставление неизменяемого снимка состояния для HUD и `GameOverScene`.
+- Storing the current session score (`score`).
+- Storing the current number of lives (`lives`).
+- Storing the current wave number (`wave`).
+- Awarding points for destroying an entity by its type and size, according to the table from `config`.
+- Granting a bonus life when the next threshold is crossed (by default every 10,000 points).
+- Reducing the life count on ship loss and answering the question "is the game over?".
+- Incrementing the wave number on request from `WaveManager`/`GameScene`.
+- Providing an immutable state snapshot for the HUD and `GameOverScene`.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не занимается детектом коллизий — получает уже готовое «кого уничтожили» от `GameScene` после резолва `CollisionEvent`.
-- Не решает, когда спавнить следующую волну или НЛО — это `WaveManager`.
-- Не управляет респауном корабля, неуязвимостью после смерти и анимациями — это `Ship`/`GameScene`.
-- Не пишет и не читает `localStorage` — рекорды сохраняет `HighScoreStorage` после game over.
-- Не отрисовывает HUD — только отдаёт данные наружу через `snapshot()`.
-- Не хранит историю набора очков и логи событий.
+- Does not perform collision detection — it receives an already-resolved "what was destroyed" from `GameScene` after resolving a `CollisionEvent`.
+- Does not decide when to spawn the next wave or UFO — that is `WaveManager`.
+- Does not manage ship respawn, post-death invulnerability, or animations — those belong to `Ship`/`GameScene`.
+- Does not read or write `localStorage` — high scores are saved by `HighScoreStorage` after game over.
+- Does not render the HUD — only exposes data externally via `snapshot()`.
+- Does not store score history or event logs.
 
-## Публичный интерфейс
+## Public Interface
 
-Модуль экспортируется как класс `Scoring`. Все методы синхронные, без сайд-эффектов вне собственного состояния.
+The module exports the class `Scoring`. All methods are synchronous with no side effects outside their own state.
 
-- `constructor(config: ScoringConfig)` — принимает таблицу очков, стартовые жизни и порог бонусной жизни из глобального `config`. Инициализирует `score = 0`, `lives = config.startingLives`, `wave = 1`, `nextBonusLifeAt = config.bonusLifeThreshold`.
-- `addKill(kind: AsteroidSize | UfoKind): void` — начисляет очки за уничтожение указанной цели и при пересечении порога(ов) добавляет бонусные жизни.
-- `loseLife(): void` — уменьшает `lives` на 1, но не ниже нуля. После нулевого значения последующие вызовы — no-op.
-- `nextWave(): void` — инкрементирует номер волны на 1.
-- `isGameOver(): boolean` — `true`, если `lives === 0`.
-- `snapshot(): { score: number; lives: number; wave: number }` — возвращает копию текущих значений для HUD и экрана game over.
+- `constructor(config: ScoringConfig)` — accepts the score table, starting lives, and bonus life threshold from the global `config`. Initialises `score = 0`, `lives = config.startingLives`, `wave = 1`, `nextBonusLifeAt = config.bonusLifeThreshold`.
+- `addKill(kind: AsteroidSize | UfoKind): void` — awards points for destroying the specified target and, when crossing a threshold, adds bonus lives.
+- `loseLife(): void` — decrements `lives` by 1, but not below zero. After reaching zero, subsequent calls are a no-op.
+- `nextWave(): void` — increments the wave number by 1.
+- `isGameOver(): boolean` — `true` if `lives === 0`.
+- `snapshot(): { score: number; lives: number; wave: number }` — returns a copy of the current values for the HUD and game over screen.
 
-Типы, используемые в сигнатурах:
+Types used in signatures:
 
-- `AsteroidSize = 'large' | 'medium' | 'small'` — из модуля `Asteroid`.
-- `UfoKind = 'large' | 'small'` — из модуля `Ufo`.
+- `AsteroidSize = 'large' | 'medium' | 'small'` — from the `Asteroid` module.
+- `UfoKind = 'large' | 'small'` — from the `Ufo` module.
 - `ScoringConfig = { points: Record<AsteroidSize | UfoKind, number>; startingLives: number; bonusLifeThreshold: number }`.
 
-## Модель данных
+## Data Model
 
-Состояние живёт в полях экземпляра класса, всё — примитивы:
+State lives in instance fields, all primitives:
 
-- `score: number` — текущий счёт партии, неотрицательный, монотонно растёт.
-- `lives: number` — целое неотрицательное, стартует из `config.startingLives` (обычно 3), не опускается ниже 0.
-- `wave: number` — целое ≥ 1, стартует с 1.
-- `nextBonusLifeAt: number` — порог, при достижении которого выдаётся следующая бонусная жизнь (стартует с `config.bonusLifeThreshold`, например, 10 000; после выдачи — увеличивается на тот же шаг).
+- `score: number` — current session score, non-negative, monotonically increasing.
+- `lives: number` — non-negative integer, starts at `config.startingLives` (typically 3), never drops below 0.
+- `wave: number` — integer ≥ 1, starts at 1.
+- `nextBonusLifeAt: number` — threshold at which the next bonus life is granted (starts at `config.bonusLifeThreshold`, e.g. 10,000; increments by the same step after being awarded).
 
-Внешних таблиц и индексов нет. Связи: экземпляр `Scoring` принадлежит `GameScene`/`World`, живёт ровно одну партию и пересоздаётся на старте новой.
+No external tables or indexes. Relations: a `Scoring` instance belongs to `GameScene`/`World`, lives for exactly one session, and is recreated at the start of a new one.
 
-## Ключевые потоки
+## Key Flows
 
-**Начисление очков за уничтожение.** `CollisionSystem` сообщает `GameScene` о столкновении пули с астероидом/НЛО. `GameScene` резолвит коллизию (помечает сущность мёртвой, делает `split()` у астероида), затем вызывает `scoring.addKill(asteroid.size)` или `scoring.addKill(ufo.kind)`. Scoring смотрит `config.points[kind]`, прибавляет к `score`, затем в цикле `while (score >= nextBonusLifeAt)`: `lives++`, `nextBonusLifeAt += config.bonusLifeThreshold`. Цикл нужен, чтобы одним большим начислением корректно выдать несколько бонусных жизней, если кто-то раскрутит НЛО на несколько порогов за раз.
+**Awarding points for a kill.** `CollisionSystem` reports a bullet–asteroid/UFO collision to `GameScene`. `GameScene` resolves the collision (marks the entity as dead, calls `split()` on the asteroid), then calls `scoring.addKill(asteroid.size)` or `scoring.addKill(ufo.kind)`. Scoring looks up `config.points[kind]`, adds it to `score`, then loops: `while (score >= nextBonusLifeAt)`: `lives++`, `nextBonusLifeAt += config.bonusLifeThreshold`. The loop is needed so that a large single award correctly grants multiple bonus lives, e.g. if a UFO kill crosses several thresholds at once.
 
-**Потеря жизни.** При коллизии корабль↔астероид или пуля НЛО↔корабль `GameScene` вызывает `scoring.loseLife()`. Scoring уменьшает `lives` на 1, но если уже был 0 — оставляет 0 (защита от двойного вызова в один тик). После этого `GameScene` спрашивает `scoring.isGameOver()` — если `true`, выполняется `SceneManager.replace(GameOverScene)` с передачей `scoring.snapshot()` наружу; если `false`, `GameScene` инициирует респаун корабля.
+**Losing a life.** When a ship↔asteroid or UFO bullet↔ship collision occurs, `GameScene` calls `scoring.loseLife()`. Scoring decrements `lives` by 1, but if it was already 0 — leaves it at 0 (guard against double calls in a single tick). After this, `GameScene` asks `scoring.isGameOver()` — if `true`, `SceneManager.replace(GameOverScene)` is called with `scoring.snapshot()` passed out; if `false`, `GameScene` initiates ship respawn.
 
-**Переход на следующую волну.** После того как `WaveManager.isCleared(world)` вернул `true`, `GameScene` вызывает `scoring.nextWave()`, а затем `waveManager.startWave(scoring.snapshot().wave)`. Scoring просто инкрементирует поле `wave` — он не принимает решения о составе волны, только ведёт счётчик.
+**Advancing to the next wave.** After `WaveManager.isCleared(world)` returns `true`, `GameScene` calls `scoring.nextWave()`, then `waveManager.startWave(scoring.snapshot().wave)`. Scoring simply increments the `wave` field — it does not make decisions about wave composition, only tracks the counter.
 
-**Отрисовка HUD.** Каждый тик `GameScene.draw(ctx)` читает `scoring.snapshot()` и передаёт в Renderer для отрисовки цифр счёта, иконок жизней и номера волны в углах канваса. Snapshot — копия, чтобы случайная мутация снаружи не ломала внутреннее состояние.
+**HUD rendering.** Each tick `GameScene.draw(ctx)` reads `scoring.snapshot()` and passes it to Renderer for drawing the score digits, life icons, and wave number in the canvas corners. The snapshot is a copy, so accidental external mutation cannot corrupt the internal state.
 
-## Зависимости
+## Dependencies
 
-- **`config`** — читает таблицу очков (`points: Record<AsteroidSize | UfoKind, number>`), стартовое число жизней (`startingLives`) и порог бонусной жизни (`bonusLifeThreshold`). Значения приходят единоразово в конструктор и далее не перечитываются.
-- **Типы `AsteroidSize` и `UfoKind`** — импортируются из модулей `Asteroid` и `Ufo` для типобезопасных ключей таблицы.
+- **`config`** — reads the score table (`points: Record<AsteroidSize | UfoKind, number>`), starting lives (`startingLives`), and bonus life threshold (`bonusLifeThreshold`). Values arrive once in the constructor and are not re-read.
+- **Types `AsteroidSize` and `UfoKind`** — imported from the `Asteroid` and `Ufo` modules for type-safe table keys.
 
-Исходящих зависимостей на другие модули нет: Scoring никого не вызывает, его вызывают (в основном `GameScene`). Это сознательно — так он остаётся тривиально тестируемым и не тащит за собой рендер/ввод/физику.
+No outgoing dependencies on other modules: Scoring calls nobody; it is called (primarily by `GameScene`). This is deliberate — it keeps it trivially testable and doesn't drag in renderer/input/physics.
 
-## Обработка ошибок
+## Error Handling
 
-- **Неизвестный `kind` в `addKill`.** Теоретически TypeScript не даст передать значение вне `AsteroidSize | UfoKind`, но в рантайме это возможно при рассинхроне типов. Поведение: если `config.points[kind]` — `undefined`, `addKill` ничего не делает (ранний выход), в dev-сборке пишет `console.warn('[scoring] unknown kill kind', kind)`.
-- **`loseLife()` при `lives === 0`.** No-op, `lives` не уходит в минус. Это страхует от ситуации, когда в один тик корабль сталкивается одновременно с несколькими сущностями и `GameScene` вызывает `loseLife` дважды.
-- **Переполнение `score`.** Теоретически `number` в JS выдерживает до `Number.MAX_SAFE_INTEGER` (~9.007·10¹⁵), что для аркадного счётчика недостижимо за любую разумную сессию. Специальной защиты не ставим.
-- **Мутация снимка снаружи.** `snapshot()` возвращает новый объектный литерал каждый вызов, поэтому даже если потребитель изменит поля — на внутреннем состоянии это не отразится.
-- **Частичный сбой.** Модуль чисто синхронный, без I/O и промисов, — частичного состояния не бывает: либо операция прошла целиком, либо вообще не началась.
+- **Unknown `kind` in `addKill`.** TypeScript won't allow passing a value outside `AsteroidSize | UfoKind`, but at runtime it is possible due to type drift. Behaviour: if `config.points[kind]` is `undefined`, `addKill` does nothing (early return); in a dev build, it writes `console.warn('[scoring] unknown kill kind', kind)`.
+- **`loseLife()` when `lives === 0`.** No-op; `lives` does not go negative. This guards against the situation where a ship collides with multiple entities in a single tick and `GameScene` calls `loseLife` twice.
+- **Score overflow.** Theoretically `number` in JS supports up to `Number.MAX_SAFE_INTEGER` (~9.007×10¹⁵), which is unreachable in any reasonable session for an arcade score counter. No special protection is added.
+- **Snapshot mutation by caller.** `snapshot()` returns a new object literal on each call, so even if the consumer modifies its fields — the internal state is unaffected.
+- **Partial failure.** The module is purely synchronous with no I/O or promises — there is no partial state: either the operation completed in full, or it never started.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript (ES2022 классы)** — язык задан на уровне архитектуры; тут используем обычный класс с приватными полями (`#score`, `#lives`, ...). Наследовать не от чего, интерфейсов наружу — один (сам класс).
-- **Без внешних библиотек.** Scoring — чистое состояние и арифметика; тянуть сюда RxJS/EventEmitter/иммутабельные коллекции нет смысла.
-- **Без персистентности.** Никаких `localStorage`, `IndexedDB`, промисов — всё в полях класса, всё синхронно.
-- **Без событий/подписок.** Потребители читают `snapshot()` по запросу каждый кадр; коллбэков типа `onBonusLife` не вводим, чтобы не усложнять.
+- **TypeScript (ES2022 classes)** — language dictated by the architecture. A regular class with private fields (`#score`, `#lives`, …) is used. Nothing to inherit from, one external interface — the class itself.
+- **No external libraries.** Scoring is pure state and arithmetic; pulling in RxJS/EventEmitter/immutable collections makes no sense.
+- **No persistence.** No `localStorage`, `IndexedDB`, or promises — everything is in class fields, all synchronous.
+- **No events/subscriptions.** Consumers read `snapshot()` on demand each frame; callbacks like `onBonusLife` are not introduced, to avoid added complexity.
 
-## Конфигурация
+## Configuration
 
-Все параметры берутся из модуля `config` и передаются в конструктор `Scoring`. Runtime-конфигурации извне нет.
+All parameters are taken from the `config` module and passed into the `Scoring` constructor. There is no external runtime configuration.
 
-- `points: Record<AsteroidSize | UfoKind, number>` — назначение: таблица очков за уничтожение. Дефолт (ориентир, подлежит тюнингу): `{ large: 20, medium: 50, small: 100, ufoLarge: 200, ufoSmall: 1000 }` в духе оригинала Atari.
-- `startingLives: number` — назначение: сколько жизней у игрока в начале партии. Дефолт: `3`.
-- `bonusLifeThreshold: number` — назначение: шаг порога для выдачи бонусной жизни. Дефолт: `10000`. Первая бонусная жизнь — при 10 000, следующая — при 20 000, и т. д.
+- `points: Record<AsteroidSize | UfoKind, number>` — purpose: score table for kills. Default (guideline, subject to tuning): `{ large: 20, medium: 50, small: 100, ufoLarge: 200, ufoSmall: 1000 }` in the spirit of the original Atari.
+- `startingLives: number` — purpose: how many lives the player has at the start of a session. Default: `3`.
+- `bonusLifeThreshold: number` — purpose: the step threshold for awarding a bonus life. Default: `10000`. The first bonus life is at 10,000, the next at 20,000, and so on.
 
-Секретов и переменных окружения у модуля нет.
+No secrets or environment variables.
 
-## Открытые вопросы
+## Open Questions
 
-- Точные значения `points` по размерам астероидов и типам НЛО — требуют тюнинга после первой играбельной сборки; ориентиры выше взяты из оригинала 1979-го и могут быть пересмотрены.
-- Оставлять ли фиксированный шаг бонусной жизни (10 000) или переходить на растущий шаг (например, 10k → 15k → 20k) для балансa длинных сессий.
-- Нужно ли ограничивать максимальное число жизней сверху (например, 7, как в некоторых клонах), чтобы игрок не копил «запас» бесконечно. На MVP — не ограничиваем.
-- Показывать ли игроку визуальное уведомление при получении бонусной жизни (короткий текст «EXTRA LIFE» в HUD). Если да — потребуется либо коллбэк из `addKill`, либо флаг `bonusJustAwarded` в snapshot.
-- Нужен ли метод `reset()` для рестарта партии без пересоздания объекта, или `GameScene` всегда создаёт новый `Scoring` на старте. По умолчанию склоняемся ко второму как к более явному.
+- Exact `points` values by asteroid size and UFO type — require tuning after the first playable build; the guideline values above are taken from the 1979 original and may be revised.
+- Whether to keep a fixed bonus life step (10,000) or switch to a growing step (e.g. 10k → 15k → 20k) for balancing long sessions.
+- Whether to cap the maximum number of lives (e.g. 7, as in some clones) so the player can't accumulate an infinite stockpile. For MVP — no cap.
+- Whether to show the player a visual notification when a bonus life is awarded (a brief "EXTRA LIFE" text in the HUD). If yes — a callback from `addKill` or a `bonusJustAwarded` flag in `snapshot` would be needed.
+- Whether a `reset()` method is needed for restarting a session without recreating the object, or whether `GameScene` always creates a new `Scoring` on start. The second option is preferred as more explicit.

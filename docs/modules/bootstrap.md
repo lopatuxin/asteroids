@@ -1,74 +1,74 @@
-# Модуль `bootstrap`
+# Module `bootstrap`
 
-## Назначение
-Точка входа приложения: HTML-страница и функция инициализации, которые собирают корневые объекты игры (canvas + 2D-контекст, `InputSystem`, `SceneManager`, `GameLoop`) и запускают игровой цикл со стартовой `MenuScene`. Без этого модуля проект физически не стартует — остальные подсистемы самодостаточны как классы, но кто-то должен создать их, связать между собой и подать первый кадр. Также здесь живёт минимальная конфигурация сборки (Vite, TypeScript, `package.json`), определяющая структуру исходников и итоговый артефакт.
+## Purpose
+The application entry point: the HTML page and initialisation function that assemble the root game objects (canvas + 2D context, `InputSystem`, `SceneManager`, `GameLoop`) and start the game loop with the initial `MenuScene`. Without this module the project literally cannot start — all other subsystems are self-contained as classes, but something must create them, wire them together, and deliver the first frame. The build configuration (`vite.config.ts`, TypeScript, `package.json`) also lives here, defining the source structure and the output artifact.
 
-## Ответственности
-- Предоставить `index.html` с единственным `<canvas id="game">` и тегом `<script type="module" src="/src/main.ts">`, а также минимальный CSS (чёрный фон, центрирование канваса, отсутствие скроллбаров).
-- В `src/main.ts` определить функцию `bootstrap()`, которая выполняет инициализацию в строго заданном порядке (см. «Ключевые потоки»).
-- Получить DOM-узел канваса по `id="game"` и выставить `canvas.width` / `canvas.height` из `CANVAS.WIDTH` / `CANVAS.HEIGHT` модуля `config`.
-- Получить `CanvasRenderingContext2D` и передать его в `GameLoop.onRender` через `SceneManager`.
-- Создать и связать корневые синглтоны приложения: `InputSystem` (с `attach(window)`), `SceneManager`, `GameLoop`.
-- Подложить в стек сцен стартовую `MenuScene`, передав ей зависимости (input, scene manager и всё, что нужно конкретной сцене).
-- Запустить `GameLoop.start()` и оформить аккуратное завершение по `beforeunload` (`loop.stop()`, `input.detach()`).
-- Владеть конфигурационными файлами сборки (`vite.config.ts`, `tsconfig.json`, `package.json`) и фиксировать файловую структуру `src/`.
+## Responsibilities
+- Providing `index.html` with a single `<canvas id="game">` and a `<script type="module" src="/src/main.ts">` tag, plus minimal CSS (black background, centred canvas, no scrollbars).
+- Defining the `bootstrap()` function in `src/main.ts`, which performs initialisation in a strictly fixed order (see Key Flows).
+- Obtaining the canvas DOM node by `id="game"` and setting `canvas.width` / `canvas.height` from `CANVAS.WIDTH` / `CANVAS.HEIGHT` in the `config` module.
+- Obtaining `CanvasRenderingContext2D` and passing it to `GameLoop.onRender` through `SceneManager`.
+- Creating and wiring the root application singletons: `InputSystem` (with `attach(window)`), `SceneManager`, `GameLoop`.
+- Pushing the initial `MenuScene` onto the scene stack, passing it its dependencies (input, scene manager, and whatever else the scene needs).
+- Starting `GameLoop.start()` and performing graceful cleanup on `beforeunload` (`loop.stop()`, `input.detach()`).
+- Owning the build configuration files (`vite.config.ts`, `tsconfig.json`, `package.json`) and fixing the `src/` directory structure.
 
-### Не-ответственности
-- Не содержит игровой логики: не апдейтит сущности, не рисует, не обрабатывает коллизии, не считает очки.
-- Не владеет игровым состоянием (`World`, `Scoring`, `HighScoreStorage`) — всё это живёт внутри сцен.
-- Не маппит клавиши и не интерпретирует события ввода — этим занят `InputSystem`.
-- Не хранит ссылок на сцены кроме первой стартовой — дальше стек сцен управляется `SceneManager`.
-- Не занимается рантайм-конфигурацией, feature-флагами, A/B-тестами — значения берёт из `config.ts`.
-- Не регистрирует Service Worker, не инициализирует аналитику, не загружает внешние ассеты — их нет.
+### Non-Responsibilities
+- Contains no game logic: does not update entities, does not draw, does not handle collisions, does not count points.
+- Does not own game state (`World`, `Scoring`, `HighScoreStorage`) — all of that lives inside scenes.
+- Does not map keys or interpret input events — that is `InputSystem`'s job.
+- Does not hold references to scenes beyond the initial one — the scene stack is managed by `SceneManager` from that point on.
+- Does not handle runtime configuration, feature flags, or A/B tests — values are taken from `config.ts`.
+- Does not register a Service Worker, initialise analytics, or load external assets — there are none.
 
-## Публичный интерфейс
-Наружу модуль выставляет ровно одну точку входа и набор конфигурационных файлов проекта.
+## Public Interface
+The module exposes exactly one entry point and a set of project configuration files.
 
-- `bootstrap(): void` — единственная экспортируемая функция из `src/main.ts`. Вызывается один раз при загрузке модуля; идемпотентна в том смысле, что повторный вызов не предполагается (если сделать — получится второй `GameLoop`, что явно ошибка вызывающей стороны).
-- `index.html` — статическая страница с `<canvas id="game">` и подключением `src/main.ts` как ES-модуля. Не имеет программного API, но фиксирует контракт: DOM содержит canvas с конкретным id к моменту исполнения скрипта.
-- `vite.config.ts` — конфигурация сборщика (минимальная: `base` для деплоя на GitHub Pages, всё остальное — дефолты Vite).
-- `tsconfig.json` — конфигурация TypeScript (strict, ES2022, `moduleResolution: bundler`, `lib: ["DOM", "ES2022"]`).
-- `package.json` — скрипты `dev` / `build` / `preview` и dev-зависимости (`typescript`, `vite`). Runtime-зависимостей нет.
+- `bootstrap(): void` — the only exported function from `src/main.ts`. Called once at module load time; idempotent in the sense that a repeated call is not expected (if made — a second `GameLoop` will be created, which is clearly a caller bug).
+- `index.html` — a static page with `<canvas id="game">` and `src/main.ts` attached as an ES module. Has no programmatic API, but establishes the contract: the DOM contains a canvas with a specific id by the time the script executes.
+- `vite.config.ts` — bundler configuration (minimal: `base` for GitHub Pages deployment, everything else at Vite defaults).
+- `tsconfig.json` — TypeScript configuration (strict, ES2022, `moduleResolution: bundler`, `lib: ["DOM", "ES2022"]`).
+- `package.json` — scripts `dev` / `build` / `preview` and dev dependencies (`typescript`, `vite`). No runtime dependencies.
 
-## Модель данных
-Модуль не владеет персистентными данными и не определяет сущностей. В рантайме внутри `bootstrap()` существует ровно одна «модель» — локальные ссылки на корневые объекты приложения, живущие в замыкании функции (и через обработчик `beforeunload`):
+## Data Model
+The module owns no persistent data and defines no entities. At runtime, inside `bootstrap()`, there is exactly one "model" — local references to root application objects living in the function closure (and via the `beforeunload` handler):
 
-| Имя | Тип | Назначение |
+| Name | Type | Purpose |
 |---|---|---|
-| `canvas` | `HTMLCanvasElement` | DOM-узел игрового поля, получен по `id="game"` |
-| `ctx` | `CanvasRenderingContext2D` | 2D-контекст канваса, передаётся в `draw` |
-| `input` | `InputSystem` | Единственный инстанс системы ввода, приаттачен к `window` |
-| `sceneManager` | `SceneManager` | Стек сцен, активная сцена сверху |
-| `loop` | `GameLoop` | Цикл `requestAnimationFrame` с аккумулятором времени |
+| `canvas` | `HTMLCanvasElement` | Game field DOM node, obtained by `id="game"` |
+| `ctx` | `CanvasRenderingContext2D` | Canvas 2D context, passed into `draw` |
+| `input` | `InputSystem` | Sole input system instance, attached to `window` |
+| `sceneManager` | `SceneManager` | Scene stack, active scene on top |
+| `loop` | `GameLoop` | `requestAnimationFrame` loop with a time accumulator |
 
-Все ссылки — приватны для `bootstrap()`. Наружу модуль ничего из этого не публикует, чтобы исключить доступ к синглтонам в обход сцен.
+All references are private to `bootstrap()`. The module publishes none of them to avoid bypass access to singletons outside the scene system.
 
-Из конфигурационных файлов:
-- `package.json` — стандартная структура npm-манифеста; значимые поля: `type: "module"`, `scripts: { dev, build, preview }`, `devDependencies: { typescript, vite }`.
-- `tsconfig.json` — `{ compilerOptions: { target: "ES2022", module: "ES2022", moduleResolution: "bundler", strict: true, lib: ["DOM", "ES2022"], noEmit: true, jsx: undefined } , include: ["src"] }`.
+From configuration files:
+- `package.json` — standard npm manifest structure; significant fields: `type: "module"`, `scripts: { dev, build, preview }`, `devDependencies: { typescript, vite }`.
+- `tsconfig.json` — `{ compilerOptions: { target: "ES2022", module: "ES2022", moduleResolution: "bundler", strict: true, lib: ["DOM", "ES2022"], noEmit: true }, include: ["src"] }`.
 
-## Ключевые потоки
+## Key Flows
 
-1. **Холодный старт приложения.** Браузер загружает `index.html`, парсит его и встречает `<script type="module" src="/src/main.ts">`. Vite (в dev) или собранный бандл (в prod) подтягивает модуль; на верхнем уровне `main.ts` вызывается `bootstrap()`. Функция находит `document.getElementById('game')` как `HTMLCanvasElement`, если не находит — кидает осмысленную ошибку (страница без канваса — баг вёрстки). Далее выставляет `canvas.width = CANVAS.WIDTH`, `canvas.height = CANVAS.HEIGHT`, получает `ctx = canvas.getContext('2d')` и проверяет, что контекст получен. Создаёт `input = new InputSystem()`, вызывает `input.attach(window)` — теперь клавиатурные события слушаются. Создаёт `sceneManager = new SceneManager()`. Создаёт `loop = new GameLoop({ onUpdate: (dt) => { sceneManager.update(dt, input); input.clearFrame(); }, onRender: () => sceneManager.draw(ctx) })`. Вызывает `sceneManager.push(new MenuScene({ sceneManager, input, ctx }))`. Вызывает `loop.start()` — с этого момента начинают приходить тики `requestAnimationFrame`.
+1. **Cold application start.** The browser loads `index.html`, parses it and encounters `<script type="module" src="/src/main.ts">`. Vite (in dev) or the built bundle (in prod) loads the module; at the top level `main.ts` calls `bootstrap()`. The function finds `document.getElementById('game')` as an `HTMLCanvasElement`; if not found it throws a meaningful error (page without a canvas is a layout bug). Then it sets `canvas.width = CANVAS.WIDTH`, `canvas.height = CANVAS.HEIGHT`, obtains `ctx = canvas.getContext('2d')` and verifies the context was obtained. Creates `input = new InputSystem()`, calls `input.attach(window)` — keyboard events are now being listened to. Creates `sceneManager = new SceneManager()`. Creates `loop = new GameLoop({ onUpdate: (dt) => { sceneManager.update(dt, input); input.clearFrame(); }, onRender: () => sceneManager.draw(ctx) })`. Calls `sceneManager.push(new MenuScene({ sceneManager, input, ctx }))`. Calls `loop.start()` — from this moment `requestAnimationFrame` ticks start arriving.
 
-2. **Тик цикла (связка, за которую отвечает bootstrap).** `GameLoop` внутри себя считает аккумулятор времени; когда накопилось ≥ `SIMULATION.STEP`, вызывает `onUpdate(dt)`. Коллбек из `bootstrap` делегирует `sceneManager.update(dt, input)`, после чего дергает `input.clearFrame()` — это критично для edge-triggered состояний (только-что нажатых actions), иначе `Fire` «застревал» бы на несколько тиков подряд. Рендер вызывается один раз за кадр: `onRender` → `sceneManager.draw(ctx)`. Сам модуль в этом потоке — только роутер коллбеков, никакой логики.
+2. **Loop tick (the wiring bootstrap is responsible for).** `GameLoop` internally maintains the time accumulator; when it reaches ≥ `SIMULATION.STEP`, it calls `onUpdate(dt)`. The callback from `bootstrap` delegates to `sceneManager.update(dt, input)`, then calls `input.clearFrame()` — this is critical for edge-triggered states (just-pressed actions), otherwise `Fire` would "stick" for several ticks. Rendering is called once per frame: `onRender` → `sceneManager.draw(ctx)`. The module in this flow is just a callback router, with no logic of its own.
 
-3. **Завершение вкладки.** На `window` вешается обработчик `beforeunload`, который вызывает `loop.stop()` и `input.detach()`. Строго говоря, браузер всё равно выгрузит страницу и освободит ресурсы, но явная остановка — это гигиена: прекращает `requestAnimationFrame`-пинг и снимает слушатели с `window` до того, как DOM будет разрушен. Полезно и в dev-сервере с HMR — при горячей перезагрузке модуля.
+3. **Tab closing.** A `beforeunload` handler is registered on `window` that calls `loop.stop()` and `input.detach()`. Strictly speaking, the browser will unload the page and release resources regardless, but explicit cleanup is good hygiene: it stops `requestAnimationFrame` pinging and removes listeners from `window` before the DOM is destroyed. This is also useful in the dev server with HMR — when a module is hot-reloaded.
 
-4. **Сборка production-артефакта.** Разработчик запускает `npm run build`, Vite читает `vite.config.ts` (берёт `base` для GitHub Pages), транспилирует TS, минифицирует, раскладывает `index.html`, один JS-бандл и один CSS в `dist/`. Папка заливается на статический хостинг; на проде страница работает ровно тем же путём, что и в dev, только без HMR.
+4. **Production build.** The developer runs `npm run build`, Vite reads `vite.config.ts` (picks `base` for GitHub Pages), transpiles TS, minifies, and outputs `index.html`, one JS bundle, and one CSS into `dist/`. The folder is uploaded to a static host; in production the page works by exactly the same path as in dev, only without HMR.
 
-## Зависимости
-Модуль по определению замыкает на себя весь граф зависимостей проекта — ему нужно создать корневые объекты. Явно импортируемые модули:
+## Dependencies
+By definition the module closes over the entire project dependency graph — it must create the root objects. Explicitly imported modules:
 
-- `./config` — `CANVAS` (размеры канваса), косвенно транзитивно используется всеми подсистемами.
-- `./systems/input` — класс `InputSystem` и метод `attach(window)` / `detach()` / `clearFrame()`.
-- `./scenes/scene-manager` — класс `SceneManager` с `push` / `update(dt, input)` / `draw(ctx)`.
-- `./scenes/menu` — класс `MenuScene`, создаётся как первая сцена в стеке.
-- `./loop/game-loop` — класс `GameLoop` с конструктором, принимающим `{ onUpdate, onRender }`, и методами `start` / `stop`.
+- `./config` — `CANVAS` (canvas dimensions), used transitively by all subsystems.
+- `./systems/input` — class `InputSystem` and methods `attach(window)` / `detach()` / `clearFrame()`.
+- `./scenes/scene-manager` — class `SceneManager` with `push` / `update(dt, input)` / `draw(ctx)`.
+- `./scenes/menu` — class `MenuScene`, created as the first scene on the stack.
+- `./loop/game-loop` — class `GameLoop` with a constructor accepting `{ onUpdate, onRender }` and methods `start` / `stop`.
 
-Внешние зависимости рантайма — только браузерные API: `document`, `window`, `HTMLCanvasElement`, `CanvasRenderingContext2D`, `requestAnimationFrame` (используется внутри `GameLoop`, не здесь напрямую). Dev-зависимости сборки — `vite` и `typescript`.
+Runtime external dependencies are only browser APIs: `document`, `window`, `HTMLCanvasElement`, `CanvasRenderingContext2D`, `requestAnimationFrame` (used inside `GameLoop`, not here directly). Build dev dependencies — `vite` and `typescript`.
 
-Структура директорий проекта, за которую отвечает bootstrap:
+Project directory structure owned by bootstrap:
 
 ```
 index.html
@@ -105,43 +105,43 @@ src/
     game-loop.ts
 ```
 
-## Обработка ошибок
-Bootstrap работает в «узком горлышке» жизненного цикла — большая часть ошибок здесь означает невалидную сборку/разметку и должна падать громко, а не деградировать молча.
+## Error Handling
+Bootstrap operates at the narrow throat of the application lifecycle — most errors here indicate an invalid build/markup and should fail loudly, not degrade silently.
 
-- **Невалидный ввод (DOM).** `document.getElementById('game')` вернул `null` или это не `HTMLCanvasElement` — `bootstrap()` кидает `Error('Canvas #game not found in document')`. То же для `canvas.getContext('2d') === null` (теоретически возможно на экзотических браузерах без 2D) — `Error('Canvas 2D context unavailable')`. Эти ошибки не ловим, они всплывают в консоль и прекращают инициализацию — без канваса играть невозможно.
-- **Сбой в подсистеме при инициализации.** Если конструктор `InputSystem` / `SceneManager` / `GameLoop` бросил — `bootstrap()` не ловит, ошибка всплывает в консоль. Игра не стартует, что корректно: частично живое состояние хуже, чем отсутствующее.
-- **Сбой внутри тика цикла.** Ответственность не bootstrap — её несёт `GameLoop` (верхнеуровневый `try/catch` вокруг вызова `onUpdate` / `onRender`, см. раздел «Обработка ошибок» в архитектуре). Bootstrap здесь только предоставляет сцены, которые цикл может вернуть в безопасное состояние (например, `sceneManager.replace(new MenuScene(...))`).
-- **Частичный успех.** Не применим: либо `bootstrap()` завершилась полностью и все корневые объекты созданы, либо выброшено исключение и страница остаётся «пустой».
-- **Повторный вызов `bootstrap()`.** Не предусмотрен; защитных проверок нет (модуль исполняется один раз при загрузке). Если вызвать вручную — получится второй `GameLoop` и двойная обработка ввода; это явный баг вызывающей стороны.
+- **Invalid DOM input.** `document.getElementById('game')` returned `null` or it is not an `HTMLCanvasElement` — `bootstrap()` throws `Error('Canvas #game not found in document')`. Same for `canvas.getContext('2d') === null` (theoretically possible on exotic browsers without 2D) — `Error('Canvas 2D context unavailable')`. These errors are not caught; they surface to the console and halt initialisation — playing without a canvas is impossible.
+- **Subsystem failure during initialisation.** If the `InputSystem` / `SceneManager` / `GameLoop` constructor throws, `bootstrap()` does not catch it; the error surfaces to the console. The game does not start, which is correct: a partially alive state is worse than an absent one.
+- **Failure inside a loop tick.** Not bootstrap's responsibility — it belongs to `GameLoop` (top-level `try/catch` around calls to `onUpdate` / `onRender`, see the "Error Handling" section in the architecture). Bootstrap here only provides the scenes that the loop can return to a safe state (e.g. `sceneManager.replace(new MenuScene(...))`).
+- **Partial success.** Not applicable: either `bootstrap()` completed fully and all root objects are created, or an exception was thrown and the page remains "blank".
+- **Repeated `bootstrap()` call.** Not expected; no guards are present (the module executes once at load time). If called manually — a second `GameLoop` and double input handling will result; this is a clear caller bug.
 
-## Стек и библиотеки
-- **TypeScript (строгий режим)** — язык задан архитектурой; здесь фиксируется `strict: true`, `target/module: ES2022`, `moduleResolution: bundler`, `lib: ["DOM", "ES2022"]`. Bundler-resolution нужен, чтобы корректно работать с Vite (он обслуживает импорты сам).
-- **Vite** — сборщик и dev-сервер. Выбран архитектурой; в этом модуле — минимальный `vite.config.ts`: только `base` для корректных путей при деплое на GitHub Pages (`/asteroids/`) и, по желанию, `root` по умолчанию. Никаких плагинов: для одного TS-файла и одного HTML плагины избыточны.
-- **Никаких runtime-зависимостей.** Ни React, ни какой-либо UI-библиотеки — всё рендерится на Canvas 2D. `package.json` содержит только `devDependencies: typescript + vite` и скрипты `dev / build / preview`.
-- **CSS — инлайн в `<style>` в `index.html`**, около 10 строк: `body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; min-height: 100vh; }` и `canvas { display: block; }`. Отдельный `.css`-файл на это не выделяем — слишком мало.
+## Stack & Libraries
+- **TypeScript (strict mode)** — language defined by architecture; here `strict: true`, `target/module: ES2022`, `moduleResolution: bundler`, `lib: ["DOM", "ES2022"]` are fixed. Bundler resolution is needed to work correctly with Vite (which serves imports itself).
+- **Vite** — bundler and dev server. Chosen by the architecture; in this module — a minimal `vite.config.ts`: only `base` for correct paths when deploying to GitHub Pages (`/asteroids/`) and optionally `root` at its default. No plugins: for one TS file and one HTML, plugins are redundant.
+- **No runtime dependencies.** No React, no UI library — everything is rendered on Canvas 2D. `package.json` contains only `devDependencies: typescript + vite` and scripts `dev / build / preview`.
+- **CSS — inlined in `<style>` in `index.html`**, about 10 lines: `body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; min-height: 100vh; }` and `canvas { display: block; }`. A separate `.css` file is not warranted — there is too little to justify it.
 
-## Конфигурация
-Модуль сам по себе — инфраструктурный, его «конфигурация» — это конфигурационные файлы проекта и константы, которые он читает.
+## Configuration
+The module is itself infrastructure; its "configuration" is the project configuration files and the constants it reads.
 
-| Имя | Назначение | Значение по умолчанию |
+| Name | Purpose | Default |
 |---|---|---|
-| `CANVAS.WIDTH` (из `config.ts`) | Ширина канваса, выставляется в `bootstrap()` | `960` |
-| `CANVAS.HEIGHT` (из `config.ts`) | Высота канваса | `720` |
-| `vite.config.ts: base` | Базовый URL для статических путей при продакшен-сборке | `'/asteroids/'` (под GitHub Pages; в dev игнорируется) |
-| `tsconfig.json: compilerOptions.strict` | Строгий режим TS | `true` |
-| `tsconfig.json: compilerOptions.target` | Целевая версия JS | `ES2022` |
-| `tsconfig.json: compilerOptions.module` | Модульная система | `ES2022` |
-| `tsconfig.json: compilerOptions.moduleResolution` | Разрешение модулей | `bundler` |
-| `tsconfig.json: compilerOptions.lib` | Доступные типы окружения | `["DOM", "ES2022"]` |
-| `package.json: scripts.dev` | Запуск dev-сервера | `vite` |
-| `package.json: scripts.build` | Продакшен-сборка | `tsc --noEmit && vite build` |
-| `package.json: scripts.preview` | Превью собранного артефакта | `vite preview` |
+| `CANVAS.WIDTH` (from `config.ts`) | Canvas width, set in `bootstrap()` | `960` |
+| `CANVAS.HEIGHT` (from `config.ts`) | Canvas height | `720` |
+| `vite.config.ts: base` | Base URL for static paths in production build | `'/asteroids/'` (for GitHub Pages; ignored in dev) |
+| `tsconfig.json: compilerOptions.strict` | TypeScript strict mode | `true` |
+| `tsconfig.json: compilerOptions.target` | Target JS version | `ES2022` |
+| `tsconfig.json: compilerOptions.module` | Module system | `ES2022` |
+| `tsconfig.json: compilerOptions.moduleResolution` | Module resolution | `bundler` |
+| `tsconfig.json: compilerOptions.lib` | Available environment types | `["DOM", "ES2022"]` |
+| `package.json: scripts.dev` | Start dev server | `vite` |
+| `package.json: scripts.build` | Production build | `tsc --noEmit && vite build` |
+| `package.json: scripts.preview` | Preview built artifact | `vite preview` |
 
-Environment-переменных, секретов и `.env`-файлов нет. Все значения известны на этапе сборки.
+No environment variables, secrets, or `.env` files. All values are known at build time.
 
-## Открытые вопросы
-- Нужна ли защита от двойного вызова `bootstrap()` (например, в случае каких-то dev-сценариев HMR), или достаточно соглашения «вызывать ровно один раз из `main.ts`». Пока — второй вариант.
-- Точное значение `base` в `vite.config.ts` зависит от того, на какой хостинг и под каким путём деплоимся; для локального запуска и preview подходит `'./'` (относительные пути), для GitHub Pages — `'/asteroids/'`. Решение отложено до момента реального деплоя.
-- Стоит ли завести CSS-файл отдельно (`src/styles.css`) вместо инлайн-стилей в `index.html` — пока объём стилей не оправдывает отдельный файл, но при добавлении оверлеев (dev HUD, game over) может пересмотреться.
-- Ловить ли ошибки `bootstrap()` верхнеуровневым `try/catch` и показывать пользователю «страницу ошибки» вместо белого экрана — для учебного проекта кажется избыточным, в консоли ошибка и так видна; открыто для будущих итераций.
-- Нужен ли `DOMContentLoaded`-guard перед чтением canvas или достаточно того, что `<script type="module">` исполняется после парсинга DOM (так и есть по спецификации defer-семантики модулей). Текущее решение — без guard, полагаемся на семантику модульных скриптов.
+## Open Questions
+- Whether to protect against a double `bootstrap()` call (e.g. in some HMR dev scenarios), or rely on the convention "call exactly once from `main.ts`". Currently — the latter.
+- The exact value of `base` in `vite.config.ts` depends on the deployment host and path; `'./'` (relative paths) works for local runs and preview, `'/asteroids/'` for GitHub Pages. Decision deferred until actual deployment.
+- Whether to introduce a separate CSS file (`src/styles.css`) instead of inline styles in `index.html` — the current volume of styles doesn't justify a separate file, but might be reconsidered if overlays (dev HUD, game over) are added.
+- Whether to wrap `bootstrap()` in a top-level `try/catch` and show the user an "error page" instead of a blank screen — for a learning project, the error is visible in the console anyway; open for future iterations.
+- Whether a `DOMContentLoaded` guard is needed before reading the canvas, or whether it is sufficient that `<script type="module">` executes after DOM parsing (true by specification defer semantics of module scripts). Current decision — no guard, relying on module script semantics.

@@ -1,42 +1,42 @@
-# Концепт — Астероиды
+# Concept — Asteroids
 
-## Что это
-Браузерная аркадная игра-клон классики Atari Asteroids 1979 года: корабль-треугольник в открытом космосе уничтожает летящие астероиды, уклоняясь от столкновений и от НЛО.
+## What It Is
+A browser arcade game — a clone of the classic Atari Asteroids (1979): a triangular spaceship in open space destroys flying asteroids while dodging collisions and UFOs.
 
-## Для кого
-- Разработчик-автор проекта — как учебный/портфолио-проект для отработки векторной математики, физики инерции, circle-to-circle коллизий, game loop на `requestAnimationFrame` и управления состоянием сцены.
-- Игрок-любитель ретро-аркад — как короткая сессионная игра в браузере без установки.
+## Who It Is For
+- The developer-author — as a learning/portfolio project to practice vector math, inertia physics, circle-to-circle collisions, a `requestAnimationFrame` game loop, and scene state management.
+- Retro-arcade casual players — as a short session game in the browser with no installation required.
 
-## Зачем это нужно (проблема и ценность)
-Нужен компактный, но нетривиальный проект, который позволяет потрогать руками реальную 2D-физику и игровой цикл — сложнее «Змейки», но всё ещё обозримый по объёму. Параллельно даёт играбельный артефакт, который можно открыть в браузере и показать.
+## Why It Exists (Problem & Value)
+A compact yet non-trivial project that lets you get hands-on experience with real 2D physics and a game loop — more complex than Snake, but still manageable in scope. It also produces a playable artifact that can be opened in a browser and shown to others.
 
-## Ключевые сценарии
-1. **Новая партия.** Игрок открывает страницу, жмёт старт, управляет кораблём (поворот влево/вправо, тяга вперёд, стрельба, гиперпространство), стреляет по астероидам, зарабатывает очки.
-2. **Прохождение волн.** После уничтожения всех астероидов текущей волны запускается следующая — с большим количеством астероидов и/или появлением НЛО-врага.
-3. **Game over и рекорд.** При потере всех жизней показывается итоговый счёт; если он попадает в топ — сохраняется в таблицу рекордов в `localStorage`.
+## Key Scenarios
+1. **New game.** The player opens the page, presses start, controls the ship (rotate left/right, thrust forward, fire, hyperspace), shoots asteroids, and earns points.
+2. **Wave progression.** After all asteroids in the current wave are destroyed, the next wave launches — with more asteroids and/or a UFO enemy.
+3. **Game over and high score.** When all lives are lost, the final score is displayed; if it ranks in the top — it is saved to the high-score table in `localStorage`.
 
-## Ограничения
-- **Стек фиксирован:** TypeScript + Canvas 2D + Vite (по аналогии с проектом «Змейка»).
-- **Платформа:** десктопный браузер, управление с клавиатуры. Мобильные тач-контролы — вне scope.
-- **Однопользовательская оффлайн-игра**, без сервера, без аккаунтов. Все состояния — в памяти вкладки и в `localStorage`.
-- **Графика:** векторная, в духе оригинала 1979 — линии на чёрном фоне, без спрайтов и 3D.
+## Constraints
+- **Stack is fixed:** TypeScript + Canvas 2D + Vite (analogous to the Snake project).
+- **Platform:** desktop browser, keyboard controls. Mobile touch controls are out of scope.
+- **Single-player offline game** — no server, no accounts. All state lives in tab memory and `localStorage`.
+- **Graphics:** vector, in the spirit of the 1979 original — lines on a black background, no sprites or 3D.
 
-## Что сознательно вне scope
-- Мультиплеер, сетевые лидерборды, аккаунты.
-- Мобильная/тач-версия.
-- Кастомизация корабля, прокачка, магазин, монетизация.
-- Уровни-карты, боссы, сюжет.
-- Редактор уровней.
+## Deliberately Out of Scope
+- Multiplayer, online leaderboards, accounts.
+- Mobile/touch version.
+- Ship customization, upgrades, shop, monetization.
+- Level maps, bosses, storyline.
+- Level editor.
 
-## Опциональные фичи (для усложнения ТЗ, не обязательны к MVP)
-- НЛО-враг, периодически появляющийся и стреляющий в игрока.
-- Particle-эффекты при взрывах астероидов/корабля.
-- Звуковые эффекты (выстрел, взрыв, тяга, появление НЛО).
-- Таблица рекордов в `localStorage`.
+## Optional Features (for extended scope, not required for MVP)
+- UFO enemy that appears periodically and shoots at the player.
+- Particle effects on asteroid/ship explosions.
+- Sound effects (shot, explosion, thrust, UFO appearance).
+- High-score table in `localStorage`.
 
-## Что проверяем этим проектом (инженерные цели)
-- Векторная математика и физика инерции (скорость как вектор, ускорение по направлению носа корабля, отсутствие трения).
-- Детект коллизий circle-to-circle для всех пар (пуля↔астероид, корабль↔астероид, пуля НЛО↔корабль).
-- Стабильный game loop на `requestAnimationFrame` с фиксированным/нормализованным шагом по времени.
-- Управление состоянием сцены и переходами между экранами (меню, игра, пауза, game over).
-- Баланс игры — скорости, размеры, количество астероидов по волнам, частота появления НЛО.
+## What This Project Tests (Engineering Goals)
+- Vector math and inertia physics (velocity as a vector, acceleration along the ship's heading, no friction).
+- Circle-to-circle collision detection for all pairs (bullet↔asteroid, ship↔asteroid, UFO bullet↔ship).
+- Stable game loop on `requestAnimationFrame` with a fixed/normalized time step.
+- Scene state management and transitions between screens (menu, game, pause, game over).
+- Game balance — speeds, sizes, asteroid counts per wave, UFO spawn frequency.

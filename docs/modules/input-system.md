@@ -1,101 +1,101 @@
-# Модуль — InputSystem
+# Module — InputSystem
 
-## Назначение
+## Purpose
 
-Подсистема ввода с клавиатуры превращает низкоуровневые события браузера (`keydown` / `keyup`) в стабильное, опрашиваемое по требованию состояние абстрактных игровых действий (`Action`). Без неё сценам пришлось бы самим слушать DOM-события и разбираться с раскладками, дребезгом «пока клавиша зажата» и edge-триггерами — игровой цикл превратился бы в кашу из обработчиков. Модуль даёт сценам ровно одно: «что нажато прямо сейчас» и «что было нажато в этом кадре».
+The keyboard input subsystem translates low-level browser events (`keydown` / `keyup`) into a stable, on-demand-queryable state of abstract game actions (`Action`). Without it, scenes would have to listen to DOM events themselves and deal with keyboard layouts, the "held-down" buzz, and edge triggers — the game loop would turn into a mess of event handlers. The module gives scenes exactly one thing: "what is pressed right now" and "what was pressed this frame".
 
-## Ответственности
+## Responsibilities
 
-- Подписка на `keydown` / `keyup` на `window` и отписка при деактивации.
-- Маппинг `KeyboardEvent.code` в абстрактное действие `Action` по таблице биндингов из `config`.
-- Поддержка двух параллельных наборов: «зажатые сейчас» (`Set<Action>`) и «только-что нажатые в текущем кадре» (`Set<Action>`).
-- Edge-триггер через одноразовое потребление очереди нажатий (`wasPressed` читает и оставляет в силе до конца кадра; `clearFrame` очищает очередь).
-- Вызов `preventDefault()` для клавиш, задействованных в игре, чтобы стрелки/пробел не скроллили страницу и не активировали дефолтные действия браузера.
-- Прокидывание символа для действия `NameChar` (ввод 3-буквенного имени в `GameOverScene`) — без интерпретации, просто передача введённого символа наверх.
+- Subscribing to `keydown` / `keyup` on `window` and unsubscribing on deactivation.
+- Mapping `KeyboardEvent.code` to an abstract `Action` via the binding table from `config`.
+- Maintaining two parallel sets: "currently held" (`Set<Action>`) and "just pressed in this frame" (`Set<Action>`).
+- Edge-triggering via one-time consumption of the press queue (`wasPressed` reads and keeps the record until end-of-frame; `clearFrame` empties the queue).
+- Calling `preventDefault()` for game-used keys so that arrows/space don't scroll the page or activate default browser actions.
+- Passing the character for the `NameChar` action (entering a 3-letter name in `GameOverScene`) — without interpretation, just forwarding the entered character.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не решает, что делать по действию — это забота сцен (`GameScene`, `MenuScene`, `GameOverScene`).
-- Не реализует ремаппинг биндингов в рантайме и UI настроек — таблица фиксирована в `config`.
-- Не обрабатывает мышь, геймпады, сенсорный ввод.
-- Не держит историю нажатий длиннее одного кадра.
-- Не знает о паузе, сценах и состоянии мира — только о клавишах и действиях.
+- Does not decide what to do with an action — that is the scene's job (`GameScene`, `MenuScene`, `GameOverScene`).
+- Does not implement runtime key rebinding or a settings UI — the table is fixed in `config`.
+- Does not handle mouse, gamepad, or touch input.
+- Does not keep input history longer than one frame.
+- Does not know about pause, scenes, or world state — only about keys and actions.
 
-## Публичный интерфейс
+## Public Interface
 
-- `class InputSystem` — единственный экспортируемый класс подсистемы.
-- `constructor(bindings: InputBindings)` — принимает таблицу биндингов вида `{ [code: string]: Action }` из `config`.
-- `attach(target: Window): void` — подписывается на `keydown` / `keyup` указанного окна. Повторный `attach` без `detach` — no-op (защита от двойной подписки).
-- `detach(): void` — снимает обработчики и очищает внутренние множества. Безопасно вызывать многократно.
-- `isDown(action: Action): boolean` — true, если действие сейчас зажато (level-triggered).
-- `wasPressed(action: Action): boolean` — true, если действие было нажато в текущем кадре (edge-triggered); потребляет запись из очереди.
-- `clearFrame(): void` — вызывается сценой в конце тика, очищает множество «только-что нажатых», не трогая «зажатые».
-- `getPressedChar(): string | null` — возвращает символ, связанный с последним нажатием `NameChar` в текущем кадре (или `null`). Используется только `GameOverScene` для ввода имени.
+- `class InputSystem` — the only exported class of the subsystem.
+- `constructor(bindings: InputBindings)` — accepts a binding table of the form `{ [code: string]: Action }` from `config`.
+- `attach(target: Window): void` — subscribes to `keydown` / `keyup` on the given window. A repeated `attach` without `detach` — no-op (protection against double subscription).
+- `detach(): void` — removes handlers and clears internal sets. Safe to call multiple times.
+- `isDown(action: Action): boolean` — true if the action is currently held (level-triggered).
+- `wasPressed(action: Action): boolean` — true if the action was pressed in the current frame (edge-triggered); consumes the record from the queue.
+- `clearFrame(): void` — called by the scene at the end of a tick; clears the "just-pressed" set without touching the "held" set.
+- `getPressedChar(): string | null` — returns the character associated with the last `NameChar` press in the current frame (or `null`). Used only by `GameOverScene` for name entry.
 
-## Модель данных
+## Data Model
 
-Внутреннее состояние экземпляра `InputSystem`:
+Internal state of a `InputSystem` instance:
 
-- `bindings: InputBindings` — иммутабельная таблица `{ [code: string]: Action }`, полученная в конструкторе.
-- `down: Set<Action>` — множество действий, для которых пришёл `keydown` и ещё не пришёл `keyup`.
-- `pressed: Set<Action>` — множество действий, нажатых в текущем кадре; очищается в `clearFrame()`.
-- `lastChar: string | null` — символ последнего `NameChar`-нажатия в кадре.
-- `attached: boolean` — флаг активной подписки, для идемпотентности `attach` / `detach`.
-- `handlers: { keydown: (e: KeyboardEvent) => void, keyup: (e: KeyboardEvent) => void } | null` — сохранённые ссылки на обработчики, нужны для корректного `removeEventListener`.
+- `bindings: InputBindings` — immutable table `{ [code: string]: Action }`, received in the constructor.
+- `down: Set<Action>` — set of actions for which `keydown` arrived and `keyup` has not yet arrived.
+- `pressed: Set<Action>` — set of actions pressed in the current frame; cleared in `clearFrame()`.
+- `lastChar: string | null` — character of the last `NameChar` press in the frame.
+- `attached: boolean` — active subscription flag, for `attach` / `detach` idempotency.
+- `handlers: { keydown: (e: KeyboardEvent) => void, keyup: (e: KeyboardEvent) => void } | null` — saved handler references, needed for correct `removeEventListener`.
 
-Внешние типы (живут в общем модуле типов, но логически принадлежат подсистеме):
+External types (live in a shared type module, but logically belong to the subsystem):
 
 - `type Action = 'RotateLeft' | 'RotateRight' | 'Thrust' | 'Fire' | 'Hyperspace' | 'Pause' | 'Confirm' | 'NameChar'`.
-- `type InputBindings = Readonly<Record<string, Action>>` — ключ — это `KeyboardEvent.code` (например, `'ArrowLeft'`, `'KeyA'`, `'Space'`).
+- `type InputBindings = Readonly<Record<string, Action>>` — key is `KeyboardEvent.code` (e.g. `'ArrowLeft'`, `'KeyA'`, `'Space'`).
 
-Биндинги по умолчанию (фиксируются в `config`): стрелки как основная раскладка и WASD как альтернативная, оба указывают на одни и те же действия — `ArrowLeft` / `KeyA` → `RotateLeft`, `ArrowRight` / `KeyD` → `RotateRight`, `ArrowUp` / `KeyW` → `Thrust`, `Space` → `Fire`, `ShiftLeft` / `ShiftRight` → `Hyperspace`, `Escape` / `KeyP` → `Pause`, `Enter` → `Confirm`. Для экрана ввода имени `KeyA..KeyZ` отдельно маркируются как `NameChar`.
+Default bindings (fixed in `config`): arrows as primary layout and WASD as alternative, both mapping to the same actions — `ArrowLeft` / `KeyA` → `RotateLeft`, `ArrowRight` / `KeyD` → `RotateRight`, `ArrowUp` / `KeyW` → `Thrust`, `Space` → `Fire`, `ShiftLeft` / `ShiftRight` → `Hyperspace`, `Escape` / `KeyP` → `Pause`, `Enter` → `Confirm`. For the name entry screen `KeyA..KeyZ` are separately marked as `NameChar`.
 
-## Ключевые потоки
+## Key Flows
 
-**Инициализация на старте сцены.** Сцена (обычно `GameScene.enter()`) создаёт или получает экземпляр `InputSystem`, вызывает `attach(window)`. Класс сохраняет ссылки на обработчики, навешивает их на `keydown` и `keyup`, выставляет `attached = true`. Дубликатный `attach` молча игнорируется.
+**Initialisation at scene start.** A scene (usually `GameScene.enter()`) creates or receives a `InputSystem` instance, calls `attach(window)`. The class saves handler references, attaches them to `keydown` and `keyup`, sets `attached = true`. A duplicate `attach` is silently ignored.
 
-**Нажатие игровой клавиши.** Пользователь жмёт `ArrowUp`. Браузер стреляет `keydown` с `event.code = 'ArrowUp'` и флагом `repeat` (на удержании). Обработчик лезет в `bindings['ArrowUp']`, получает `'Thrust'`. Если `event.repeat === false` — добавляет `Thrust` и в `down`, и в `pressed`; если `repeat === true` — только поддерживает `down` (в `pressed` не кладёт, чтобы авто-повтор не триггерил `wasPressed`). Вызывает `event.preventDefault()`, чтобы страница не скроллилась. На ближайшем тике `GameScene` читает `isDown('Thrust')` и включает тягу корабля.
+**Pressing a game key.** The user presses `ArrowUp`. The browser fires `keydown` with `event.code = 'ArrowUp'` and the `repeat` flag (on hold). The handler looks up `bindings['ArrowUp']`, gets `'Thrust'`. If `event.repeat === false` — adds `Thrust` to both `down` and `pressed`; if `repeat === true` — only maintains `down` (not added to `pressed`, so auto-repeat doesn't trigger `wasPressed`). Calls `event.preventDefault()` to prevent page scrolling. On the next tick `GameScene` reads `isDown('Thrust')` and activates ship thrust.
 
-**Отпускание клавиши.** Пользователь отпускает `ArrowUp`. Браузер стреляет `keyup`. Обработчик находит в биндингах `'Thrust'`, удаляет его из `down`. Из `pressed` не трогает — edge-событие «в этом кадре было нажатие» остаётся валидным до конца кадра.
+**Releasing a key.** The user releases `ArrowUp`. The browser fires `keyup`. The handler finds `'Thrust'` in bindings, removes it from `down`. `pressed` is not touched — the edge-event "was pressed this frame" remains valid until end-of-frame.
 
-**Одноразовое действие (огонь, пауза, гиперпространство).** Сцена вызывает `wasPressed('Fire')`. Если `Fire` в `pressed` — метод возвращает `true` и оставляет запись до `clearFrame` (повторный вызов в том же кадре тоже вернёт `true` — это желательно, если два места в сцене хотят знать о нажатии). В конце тика сцена вызывает `inputSystem.clearFrame()`, и `pressed` опустошается. Следующий кадр увидит `Fire` заново только после нового `keydown`.
+**One-shot action (fire, pause, hyperspace).** The scene calls `wasPressed('Fire')`. If `Fire` is in `pressed` — the method returns `true` and leaves the record until `clearFrame` (a repeat call in the same frame also returns `true` — this is desired if two places in the scene want to know about the press). At end-of-tick the scene calls `inputSystem.clearFrame()`, and `pressed` is emptied. The next frame will see `Fire` again only after a new `keydown`.
 
-**Ввод имени в GameOverScene.** Сцена каждый тик проверяет `wasPressed('NameChar')` и, если true, читает `getPressedChar()`. Обработчик `keydown` для любой буквенной клавиши, забинденной на `NameChar`, кладёт в `lastChar` соответствующий символ (берётся из `event.key.toUpperCase()`, ограниченный до `A–Z`). Сцена добавляет букву к текущей позиции в слоте имени (3 символа), `clearFrame` обнуляет `lastChar`.
+**Name input in GameOverScene.** The scene each tick checks `wasPressed('NameChar')` and, if true, reads `getPressedChar()`. The `keydown` handler for any letter key bound to `NameChar` puts the corresponding character in `lastChar` (taken from `event.key.toUpperCase()`, constrained to `A–Z`). The scene adds the letter to the current position in the 3-character name slot; `clearFrame` zeroes `lastChar`.
 
-## Зависимости
+## Dependencies
 
-- **`config`** — источник `InputBindings` (таблицы биндингов) и, опционально, списка кодов, для которых нужно `preventDefault`. Других зависимостей у подсистемы нет.
-- **`window` (глобальный объект браузера)** — используется как EventTarget; конкретная ссылка передаётся через `attach(target)`, что упрощает тесты и изоляцию.
+- **`config`** — source of `InputBindings` (the binding table) and optionally the list of codes for which `preventDefault` is needed. No other dependencies.
+- **`window` (global browser object)** — used as an `EventTarget`; the specific reference is passed through `attach(target)`, simplifying testing and isolation.
 
-`InputSystem` ни от каких других модулей приложения не зависит: его читают сцены, но он про них ничего не знает.
+`InputSystem` depends on no other application modules: scenes read it, but it knows nothing about them.
 
-## Обработка ошибок
+## Error Handling
 
-- **Неизвестный `KeyboardEvent.code`** — нет записи в `bindings`: обработчик молча выходит, ни `down`, ни `pressed` не меняются, `preventDefault` не вызывается (чтобы не ломать системные шорткаты браузера на клавишах, которые игре не принадлежат).
-- **Повторный `attach` без `detach`** — считается no-op; предотвращает удвоение обработчиков при переходах между сценами, которые переинициализируют ввод.
-- **`detach` без активного `attach`** — безопасен: проверяет `attached`, ничего не делает.
-- **Потеря фокуса окном (`blur`)** — риск «залипания» зажатых клавиш (пользователь отпустил `ArrowUp` в другом окне, `keyup` не пришёл). Подсистема слушает `window.blur` как часть `attach` и в обработчике делает полный сброс `down` и `pressed`. Это в рамках ответственности модуля, так как относится к корректности состояния ввода.
-- **Повторная инициализация при переходе между сценами** — `SceneManager` вызывает `detach` у старой сцены и `attach` у новой (либо переиспользует общий инстанс). Полный сброс множеств при `detach` гарантирует, что клавиша, зажатая в одной сцене, не «перетечёт» в следующую.
-- **Исключения внутри обработчика** — оборачиваются в try/catch на уровне обработчика; в dev-сборке логируются с префиксом `[input]`, в проде — подавляются, ввод продолжает работать.
+- **Unknown `KeyboardEvent.code`** — no record in `bindings`: the handler silently exits, neither `down` nor `pressed` are changed, `preventDefault` is not called (so browser system shortcuts on non-game keys are not broken).
+- **Repeated `attach` without `detach`** — treated as no-op; prevents doubled handlers when scenes reinitialise input during transitions.
+- **`detach` without an active `attach`** — safe: checks `attached`, does nothing.
+- **Window losing focus (`blur`)** — risk of "sticky" held keys (user released `ArrowUp` in another window, `keyup` never arrived). The subsystem listens to `window.blur` as part of `attach` and fully clears `down` and `pressed` in that handler. This is within the module's responsibility since it concerns the correctness of input state.
+- **Re-initialisation on scene transition** — `SceneManager` calls `detach` on the old scene and `attach` on the new one (or reuses a shared instance). Full set reset on `detach` guarantees that a key held in one scene doesn't "leak" into the next.
+- **Exceptions inside a handler** — wrapped in try/catch at the handler level; logged with the prefix `[input]` in dev builds, suppressed in prod; input continues to work.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript** — унаследован от всего проекта; типы `Action` и `InputBindings` ловят опечатки в биндингах на этапе компиляции.
-- **Нативный `KeyboardEvent`** — ключевой выбор: используем `event.code` (физический код клавиши, стабильный между раскладками), а не устаревший `event.keyCode`. Для символьного ввода имени — `event.key`. Никаких сторонних библиотек ввода (`mousetrap`, `hotkeys-js`) не требуется: маппинг и два множества тривиально пишутся вручную.
-- **Никаких зависимостей от Canvas, сцен, game loop** — модуль изолирован, тестируется подменой фейкового `EventTarget`.
+- **TypeScript** — inherited from the whole project; types `Action` and `InputBindings` catch binding typos at compile time.
+- **Native `KeyboardEvent`** — key choice: `event.code` is used (physical key code, stable across layouts), not the deprecated `event.keyCode`. For character input of the name — `event.key`. No third-party input libraries (`mousetrap`, `hotkeys-js`) are needed: the mapping and two sets are trivially written manually.
+- **No dependencies on Canvas, scenes, or game loop** — the module is isolated and testable by substituting a fake `EventTarget`.
 
-## Конфигурация
+## Configuration
 
-Все настройки приходят из модуля `config.ts` — не из окружения, т.к. это фронтенд-бандл без рантайм-конфигурации. Релевантные для подсистемы записи:
+All settings come from `config.ts` — not from the environment, since this is a frontend bundle without runtime configuration. Relevant entries for the subsystem:
 
-- `INPUT_BINDINGS: InputBindings` — таблица `code → Action`. Дефолт: стрелки + WASD для движения, `Space` для огня, `ShiftLeft`/`ShiftRight` для гиперпространства, `Escape`/`KeyP` для паузы, `Enter` для подтверждения, `KeyA..KeyZ` для `NameChar`.
-- `INPUT_PREVENT_DEFAULT_CODES: ReadonlySet<string>` — коды, для которых вызывается `preventDefault` (все игровые клавиши; `Escape` и буквы имени обычно не включаются, чтобы не ломать UX браузера). Дефолт: `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`, `Space`, `KeyW`, `KeyA`, `KeyS`, `KeyD`.
+- `INPUT_BINDINGS: InputBindings` — `code → Action` table. Default: arrows + WASD for movement, `Space` for fire, `ShiftLeft`/`ShiftRight` for hyperspace, `Escape`/`KeyP` for pause, `Enter` for confirm, `KeyA..KeyZ` for `NameChar`.
+- `INPUT_PREVENT_DEFAULT_CODES: ReadonlySet<string>` — codes for which `preventDefault` is called (all game keys; `Escape` and name letters are typically not included to avoid breaking browser UX). Default: `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`, `Space`, `KeyW`, `KeyA`, `KeyS`, `KeyD`.
 
-Секретов и переменных окружения у модуля нет.
+No secrets or environment variables.
 
-## Открытые вопросы
+## Open Questions
 
-- Нужно ли включать `KeyDown`-обработку `ArrowDown` (в оригинале не используется) или мапить её, например, на «обратная тяга» / тормоз — пока не привязана, но `preventDefault` на неё имеет смысл, чтобы не скроллить.
-- Поддерживать ли зажатие `Fire` для авто-стрельбы (level-triggered) или только edge (как в оригинале) — на уровне подсистемы поддерживаются оба режима через `isDown` / `wasPressed`, решение принимает `GameScene`. Зафиксировать окончательно при балансе.
-- Нужен ли отдельный action для «вправо/влево» в меню или хватит `RotateLeft` / `RotateRight` — пока переиспользуем, но стоит проверить на UX-тесте меню.
-- Стоит ли выносить `NameChar` в отдельную подсистему «текстовый ввод» — сейчас он торчит сбоку от игровых действий; если экран ввода имени обрастёт функциональностью (удаление, навигация), разделение станет оправданным.
+- Whether to include `KeyDown` handling for `ArrowDown` (not used in the original) or map it to, e.g., "reverse thrust" / brake — not bound yet, but `preventDefault` on it makes sense to prevent scrolling.
+- Whether held `Fire` should auto-fire (level-triggered) or only edge (as in the original) — both modes are supported at the subsystem level via `isDown` / `wasPressed`; the decision is made in `GameScene`. Finalise during balance tuning.
+- Whether a separate action is needed for "left/right" in menus or whether `RotateLeft` / `RotateRight` are sufficient — currently reused, but worth verifying in a UX test of the menu.
+- Whether to extract `NameChar` into a separate "text input" subsystem — currently it sticks out beside game actions; if the name entry screen grows in functionality (deletion, navigation), separation becomes justified.

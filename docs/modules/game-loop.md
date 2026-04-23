@@ -1,61 +1,61 @@
-# Модуль `game-loop`
+# Module `game-loop`
 
-## Назначение
-Обеспечивает стабильный игровой цикл поверх `requestAnimationFrame` с аккумулятором времени и фиксированным шагом симуляции 60 Hz. Гарантирует детерминированность физики и коллизий независимо от частоты кадров монитора (60/120/144 Hz) и плавающих задержек браузера. Без этого модуля симуляция была бы привязана к переменному `dt` рендера, физика «плавала» бы на разных машинах, а столкновения пропускались при фризах вкладки.
+## Purpose
+Provides a stable game loop on top of `requestAnimationFrame` with a time accumulator and a fixed 60 Hz simulation step. Guarantees deterministic physics and collisions independent of the monitor's frame rate (60/120/144 Hz) and browser timing fluctuations. Without this module the simulation would be tied to the variable `dt` of the render, physics would "float" across different machines, and collisions would be missed during tab freezes.
 
-## Ответственности
-- Запрос кадров через `requestAnimationFrame` и замер прошедшего времени через `performance.now()`.
-- Аккумулирование реальной дельты кадра и разбиение её на фиксированные шаги симуляции `SIMULATION.STEP` (1/60 с).
-- Вызов коллбэка `onUpdate(dt)` ровно столько раз за кадр, сколько накопилось полных шагов в аккумуляторе.
-- Вызов коллбэка `onRender()` ровно один раз за кадр `rAF`, независимо от числа выполненных шагов симуляции.
-- Клампинг дельты кадра сверху значением `SIMULATION.MAX_FRAME_TIME`, чтобы долгая пауза вкладки не превратилась в лавину шагов симуляции.
-- Защита от «spiral of death»: ограничение количества шагов симуляции за один кадр.
-- Управление жизненным циклом цикла: `start()` / `stop()` с корректной отменой зарегистрированного `rAF`.
+## Responsibilities
+- Requesting frames via `requestAnimationFrame` and measuring elapsed time via `performance.now()`.
+- Accumulating the real frame delta and splitting it into fixed `SIMULATION.STEP` (1/60 s) simulation steps.
+- Calling the `onUpdate(dt)` callback exactly as many times per frame as there are complete steps in the accumulator.
+- Calling the `onRender()` callback exactly once per `rAF` frame, independent of the number of simulation steps executed.
+- Clamping the frame delta from above with `SIMULATION.MAX_FRAME_TIME`, so that a long tab pause doesn't become an avalanche of simulation steps.
+- Protection against "spiral of death": limiting the number of simulation steps per frame.
+- Managing the loop lifecycle: `start()` / `stop()` with correct cancellation of the registered `rAF`.
 
-### Не-ответственности
-- Не знает об игровых объектах, сценах, вводе, канвасе и контексте отрисовки — работает исключительно через переданные коллбэки.
-- Не решает, что именно обновляется и рисуется — это ответственность `SceneManager` и `GameScene`.
-- Не управляет паузой игры (пауза — это отсутствие апдейтов в сценах, а не остановка цикла); `stop()` задумано для размонтирования приложения, а не для паузы.
-- Не делает интерполяции состояния между шагами — рендер рисует «как есть» последнее симулированное состояние (параметр `alpha` для интерполяции — см. открытые вопросы).
-- Не замеряет FPS и не предоставляет телеметрию — это задача опционального dev-HUD.
-- Не ловит ошибки внутри коллбэков как часть бизнес-логики — только верхнеуровневый защитный `try/catch` (см. «Обработка ошибок»).
+### Non-Responsibilities
+- Does not know about game objects, scenes, input, the canvas, or the drawing context — operates exclusively through the provided callbacks.
+- Does not decide what is updated or drawn — that is `SceneManager`'s and `GameScene`'s responsibility.
+- Does not manage game pausing (pause is the absence of updates in scenes, not stopping the loop); `stop()` is intended for application unmounting, not pausing.
+- Does not interpolate state between steps — the renderer draws the "as-is" last simulated state (the `alpha` parameter for interpolation — see Open Questions).
+- Does not measure FPS or provide telemetry — that is the optional dev-HUD's job.
+- Does not catch errors inside callbacks as business logic — only a top-level protective `try/catch` (see Error Handling).
 
-## Публичный интерфейс
-Один экспорт из `src/core/game-loop.ts` — класс `GameLoop`.
+## Public Interface
+One export from `src/core/game-loop.ts` — the `GameLoop` class.
 
-- `new GameLoop(onUpdate: (dt: number) => void, onRender: () => void)` — конструктор; принимает два коллбэка, сохраняет их в поля.
-- `start(): void` — запускает цикл. Если уже запущен — no-op. Инициализирует `lastTime` текущим `performance.now()`, обнуляет `accumulator`, регистрирует первый `requestAnimationFrame`.
-- `stop(): void` — останавливает цикл. Отменяет зарегистрированный `rafId` через `cancelAnimationFrame`, выставляет `running = false`. Повторный `stop()` — no-op.
+- `new GameLoop(onUpdate: (dt: number) => void, onRender: () => void)` — constructor; accepts two callbacks and stores them in fields.
+- `start(): void` — starts the loop. If already running — no-op. Initialises `lastTime` to the current `performance.now()`, zeroes `accumulator`, registers the first `requestAnimationFrame`.
+- `stop(): void` — stops the loop. Cancels the registered `rafId` via `cancelAnimationFrame`, sets `running = false`. Repeated `stop()` — no-op.
 
-Приватный метод — `tick(now: number)` — тело цикла, передаётся в `requestAnimationFrame` (через привязанный `this`).
+Private method — `tick(now: number)` — the loop body, passed to `requestAnimationFrame` (via bound `this`).
 
-## Модель данных
-Модуль — stateful-класс с чисто внутренним состоянием; наружу поля не выставляются.
+## Data Model
+The module is a stateful class with purely internal state; fields are not exposed.
 
-| Поле | Тип | Назначение |
+| Field | Type | Purpose |
 |---|---|---|
-| `onUpdate` | `(dt: number) => void` | коллбэк шага симуляции, вызывается с фиксированным `dt = SIMULATION.STEP` |
-| `onRender` | `() => void` | коллбэк отрисовки, вызывается один раз за кадр `rAF` |
-| `running` | `boolean` | флаг активного цикла; используется для идемпотентности `start/stop` |
-| `rafId` | `number` | идентификатор, возвращённый `requestAnimationFrame`, нужен для `cancelAnimationFrame` |
-| `lastTime` | `number` | timestamp предыдущего тика в миллисекундах (`performance.now()`) |
-| `accumulator` | `number` | накопленное несимулированное время в секундах |
+| `onUpdate` | `(dt: number) => void` | simulation step callback, called with fixed `dt = SIMULATION.STEP` |
+| `onRender` | `() => void` | rendering callback, called once per `rAF` frame |
+| `running` | `boolean` | active loop flag; used for `start/stop` idempotency |
+| `rafId` | `number` | identifier returned by `requestAnimationFrame`, needed for `cancelAnimationFrame` |
+| `lastTime` | `number` | previous tick timestamp in milliseconds (`performance.now()`) |
+| `accumulator` | `number` | accumulated un-simulated time in seconds |
 
-Константы, используемые модулем: `SIMULATION.STEP` (1/60 с), `SIMULATION.MAX_FRAME_TIME` (0.25 с), локальная константа модуля `MAX_STEPS_PER_FRAME = 8` (защита от spiral of death).
+Constants used by the module: `SIMULATION.STEP` (1/60 s), `SIMULATION.MAX_FRAME_TIME` (0.25 s), local module constant `MAX_STEPS_PER_FRAME = 8` (spiral-of-death protection).
 
-## Ключевые потоки
+## Key Flows
 
-1. **Старт цикла.** Bootstrap создаёт `new GameLoop(sceneManager.update.bind(sceneManager), sceneManager.draw.bind(sceneManager, ctx))` и вызывает `start()`. Модуль ставит `running = true`, записывает `lastTime = performance.now()`, зануляет `accumulator`, регистрирует `rafId = requestAnimationFrame(this.tick)`. Далее цикл живёт сам по себе до `stop()`.
+1. **Loop start.** Bootstrap creates `new GameLoop(sceneManager.update.bind(sceneManager), sceneManager.draw.bind(sceneManager, ctx))` and calls `start()`. The module sets `running = true`, records `lastTime = performance.now()`, zeroes `accumulator`, registers `rafId = requestAnimationFrame(this.tick)`. From then on the loop runs on its own until `stop()`.
 
-2. **Обычный кадр (dt ≈ 16 мс на 60 Hz-мониторе).** Браузер будит `tick(now)`. Считается `delta = (now - lastTime) / 1000`, `lastTime = now`. `delta` клампится сверху `SIMULATION.MAX_FRAME_TIME` (если меньше — без изменений). `accumulator += delta` → примерно `0.0167`. Запускается цикл симуляции: `accumulator (≈0.0167) >= STEP (≈0.0167)` — один вызов `onUpdate(STEP)`, `accumulator -= STEP` → ≈0. Цикл завершается, вызывается `onRender()`, регистрируется следующий `rAF`.
+2. **Normal frame (dt ≈ 16 ms on a 60 Hz monitor).** The browser wakes `tick(now)`. `delta = (now - lastTime) / 1000`, `lastTime = now`. `delta` is clamped at `SIMULATION.MAX_FRAME_TIME` (if less — unchanged). `accumulator += delta` → approximately `0.0167`. Simulation loop runs: `accumulator (≈0.0167) >= STEP (≈0.0167)` — one call to `onUpdate(STEP)`, `accumulator -= STEP` → ≈0. Loop ends, `onRender()` is called, the next `rAF` is registered.
 
-3. **Кадр на 144 Hz-мониторе (dt ≈ 7 мс).** Аккумулятор за один кадр `rAF` не накапливает полного шага (`0.007 < 0.0167`), `onUpdate` не вызывается, сразу идёт `onRender()` с предыдущим состоянием симуляции. На следующем-втором кадре аккумулятор перевалит за `STEP`, произойдёт один `onUpdate`, и так далее — в среднем один шаг симуляции на ~2.4 кадра рендера. Симуляция остаётся 60 Hz, рендер — 144 Hz.
+3. **Frame on a 144 Hz monitor (dt ≈ 7 ms).** The accumulator does not build up a full step per `rAF` frame (`0.007 < 0.0167`), `onUpdate` is not called, `onRender()` fires with the previous simulation state. On the next-second frame the accumulator crosses `STEP`, one `onUpdate` fires, and so on — on average one simulation step per ~2.4 render frames. Simulation stays at 60 Hz, rendering at 144 Hz.
 
-4. **Долгий фриз / возврат из фоновой вкладки.** Браузер не будил `rAF` несколько секунд, `now - lastTime` огромна. Сырой `delta` был бы, скажем, 10 секунд → 600 шагов симуляции за один кадр, что превратит цикл в зависший. Защита срабатывает в два приёма: `delta` клампится до `MAX_FRAME_TIME = 0.25 с` (потенциально 15 шагов), далее внутренний счётчик `steps` во время цикла разбора аккумулятора прерывает разбор при `steps > MAX_STEPS_PER_FRAME` (8), отбрасывая остаток `accumulator`. Игра теряет немного «долга», но продолжает идти.
+4. **Long freeze / return from background tab.** The browser didn't wake `rAF` for several seconds; `now - lastTime` is huge. Raw `delta` would be, say, 10 seconds → 600 simulation steps in one frame, locking up the loop. Protection fires in two stages: `delta` is clamped to `MAX_FRAME_TIME = 0.25 s` (up to 15 steps), then an internal `steps` counter during accumulator draining breaks the loop at `steps > MAX_STEPS_PER_FRAME` (8), discarding the remaining `accumulator`. The game loses a bit of "debt" but continues running.
 
-5. **Стоп.** Кто-то сверху (например, обработчик `beforeunload` или тест) вызывает `stop()`. Модуль `cancelAnimationFrame(rafId)`, `running = false`. Уже начавшийся `tick` (если браузер успел его запустить) отработает до конца — но поскольку после `onRender()` он регистрирует новый `rAF` только при условии `running`, следующий кадр не встанет в очередь.
+5. **Stop.** Someone from above (e.g. the `beforeunload` handler or a test) calls `stop()`. The module calls `cancelAnimationFrame(rafId)`, `running = false`. An already-started `tick` (if the browser managed to launch it) will complete — but since after `onRender()` it registers a new `rAF` only if `running`, the next frame won't be queued.
 
-Псевдокод тика:
+Tick pseudocode:
 
 ```
 tick(now):
@@ -70,42 +70,42 @@ tick(now):
     accumulator -= STEP
     steps++
     if (steps > MAX_STEPS_PER_FRAME):
-      accumulator = 0   // сбрасываем долг
+      accumulator = 0   // discard debt
       break
   safeCall(() => onRender())
   if (running) rafId = requestAnimationFrame(tick)
 ```
 
-## Зависимости
-- **`config`** — читает `SIMULATION.STEP` и `SIMULATION.MAX_FRAME_TIME`. Больше ничего.
-- **Браузерные API** — `window.requestAnimationFrame`, `window.cancelAnimationFrame`, `performance.now()`. Доступны по умолчанию в любом современном браузере — target платформы из концепта (десктопный браузер).
-- **Потребители** — `Bootstrap` (создаёт и стартует), `SceneManager` (его методы `update/draw` передаются как коллбэки). Сам модуль о них не знает.
+## Dependencies
+- **`config`** — reads `SIMULATION.STEP` and `SIMULATION.MAX_FRAME_TIME`. Nothing else.
+- **Browser APIs** — `window.requestAnimationFrame`, `window.cancelAnimationFrame`, `performance.now()`. Available by default in any modern browser — the target platform from the concept (desktop browser).
+- **Consumers** — `Bootstrap` (creates and starts), `SceneManager` (its `update/draw` methods are passed as callbacks). The module itself knows nothing about them.
 
-## Обработка ошибок
-- **Исключение внутри `onUpdate` или `onRender`.** Ловится верхнеуровневым `try/catch` вокруг каждого вызова коллбэка (`safeCall` в псевдокоде). Поведение зависит от сборки:
-  - **dev (`import.meta.env.DEV === true`)**: исключение логируется в `console.error` с префиксом `[loop]` и **пробрасывается дальше** — цикл падает, браузер показывает ошибку в DevTools, разработчик видит проблему сразу.
-  - **prod**: исключение логируется в `console.error`, но **проглатывается** — цикл продолжает работать, чтобы игрок не упёрся в «чёрный экран» из-за одной пограничной ошибки. По договорённости из `architecture.md` верхнеуровневый обработчик в bootstrap может решить вернуть пользователя в `MenuScene` при систематических падениях, но это — вне ответственности `GameLoop`.
-- **Долгая пауза вкладки / фриз процесса.** `MAX_FRAME_TIME` обрезает накопившуюся дельту; `MAX_STEPS_PER_FRAME` обрезает число шагов симуляции за кадр. Игра теряет некоторое «игровое время», но не уходит в spiral of death.
-- **Повторный `start()` при уже запущенном цикле** / **повторный `stop()` при уже остановленном.** Оба идемпотентны, no-op.
-- **Невалидный `rafId` при `cancelAnimationFrame`** (например, `stop()` до `start()`) — браузерный API толерантен к неизвестным id, исключения не кидает; дополнительная проверка не требуется.
-- **Частичный успех.** В рамках одного кадра возможно: одни шаги `onUpdate` отработали, следующий упал (в prod — проглочен), `onRender` выполняется поверх частично обновлённого состояния. Это приемлемо: визуально игрок увидит один «смазанный» кадр, симуляция продолжит тикать.
+## Error Handling
+- **Exception inside `onUpdate` or `onRender`.** Caught by a top-level `try/catch` around each callback call (`safeCall` in the pseudocode). Behaviour depends on the build:
+  - **dev (`import.meta.env.DEV === true`)**: the exception is logged to `console.error` with the prefix `[loop]` and **re-thrown** — the loop crashes, the browser shows the error in DevTools, the developer sees the problem immediately.
+  - **prod**: the exception is logged to `console.error` but **swallowed** — the loop continues so the player doesn't hit a "black screen" due to a single edge-case error. As per the agreement in `architecture.md`, the top-level handler in bootstrap may decide to return the user to `MenuScene` on systematic crashes, but that is outside `GameLoop`'s responsibility.
+- **Long tab pause / process freeze.** `MAX_FRAME_TIME` clips the accumulated delta; `MAX_STEPS_PER_FRAME` clips the number of simulation steps per frame. The game loses some "game time" but doesn't enter the spiral of death.
+- **Repeated `start()` when the loop is already running** / **repeated `stop()` when already stopped.** Both are idempotent, no-op.
+- **Invalid `rafId` in `cancelAnimationFrame`** (e.g. `stop()` before `start()`) — the browser API is tolerant of unknown ids and does not throw; no additional check needed.
+- **Partial success.** Within a single frame it is possible: some `onUpdate` steps completed, the next one crashed (in prod — swallowed), `onRender` executes on top of a partially updated state. This is acceptable: visually the player sees one "smeared" frame, and simulation continues ticking.
 
-## Стек и библиотеки
-- **TypeScript, класс ES2022** — модуль узкий, никаких внешних библиотек; класс выбран ради явного владения состоянием (`running`, `rafId`, `accumulator`, `lastTime`) и чтобы привязать `tick` к `this` через стрелочное поле.
-- **`performance.now()`** — монотонные высокоточные таймстемпы; `Date.now()` не годится (может ходить назад при корректировке системного времени).
-- **`requestAnimationFrame`** — стандартный механизм синхронизации с вертикальной разверткой, соответствует решению из `architecture.md`.
-- Никаких библиотек вида `mainloop.js` — реализация умещается в ~50 строк, собственный код проще поддерживать и тестировать.
+## Stack & Libraries
+- **TypeScript, ES2022 class** — the module is narrow; no external libraries; the class is chosen for explicit state ownership (`running`, `rafId`, `accumulator`, `lastTime`) and to bind `tick` to `this` via an arrow field.
+- **`performance.now()`** — monotonic high-precision timestamps; `Date.now()` is unsuitable (can go backwards when system time is adjusted).
+- **`requestAnimationFrame`** — the standard mechanism for synchronising with the vertical refresh, matching the decision in `architecture.md`.
+- No libraries like `mainloop.js` — the implementation fits in ~50 lines; own code is simpler to maintain and test.
 
-## Конфигурация
-Собственных env-переменных, секретов и рантайм-настроек у модуля нет. Всё поведение задаётся:
-- Константами из модуля `config`:
-  - `SIMULATION.STEP` (1/60 с) — фиксированный шаг симуляции, значение по умолчанию продиктовано каноном 60 Hz.
-  - `SIMULATION.MAX_FRAME_TIME` (0.25 с) — потолок дельты кадра, по умолчанию 250 мс (эмпирический компромисс: достаточно, чтобы пережить редкий GC-паузу, мало, чтобы не допустить лавины шагов после долгого фриза).
-- Локальной константой модуля `MAX_STEPS_PER_FRAME` (8) — потолок числа шагов симуляции за один кадр `rAF`, защита от spiral of death. Выведена эмпирически: при 60 Hz это ~133 мс «наверстать» за кадр — больше, чем обычно бывает при нормальной работе, но меньше, чем `MAX_FRAME_TIME / STEP = 15`, что задаёт запас.
-- Флагом сборки `import.meta.env.DEV` — определяет, пробрасывать ли пойманное исключение наружу или только логировать.
+## Configuration
+The module has no env variables, secrets, or runtime settings. All behaviour is determined by:
+- Constants from the `config` module:
+  - `SIMULATION.STEP` (1/60 s) — fixed simulation step; the default value is dictated by the 60 Hz canon.
+  - `SIMULATION.MAX_FRAME_TIME` (0.25 s) — frame delta ceiling; default 250 ms (empirical compromise: enough to survive a rare GC pause, small enough to prevent an avalanche of steps after a long freeze).
+- Local module constant `MAX_STEPS_PER_FRAME` (8) — ceiling on the number of simulation steps per `rAF` frame, protection against spiral of death. Derived empirically: at 60 Hz this is ~133 ms to "catch up" per frame — more than typically occurs during normal operation, but less than `MAX_FRAME_TIME / STEP = 15`, providing a margin.
+- Build flag `import.meta.env.DEV` — determines whether a caught exception is re-thrown or only logged.
 
-## Открытые вопросы
-- **Параметр `alpha` для интерполяции рендера.** В `architecture.md` упомянут `onRender(alpha)` — доля следующего шага симуляции (`accumulator / STEP`), нужная для сглаживания рендера на 144 Hz-мониторе. В текущем API модуля `onRender` — без параметров. Нужно ли сразу вводить `alpha` или отложить до появления заметного jitter на high-refresh мониторах — решить при реализации `GameScene.draw`.
-- **Поведение при смене вкладки.** `requestAnimationFrame` в неактивной вкладке приостанавливается браузером; при возврате мы получаем один кадр с огромной дельтой. Текущий дизайн просто теряет это время. Альтернатива — слушать `document.visibilitychange` и явно «замораживать» игру (переводить в `PauseScene`). Решение — вне ответственности модуля, но API должен быть удобен для внешнего управления.
-- **Значение `MAX_STEPS_PER_FRAME = 8`** — подобрано на глаз; возможно, стоит вынести в `config.SIMULATION` рядом с `MAX_FRAME_TIME` для единообразия тюнинга.
-- **Тесты.** По общему решению (`architecture.md`) тестов нет, но game loop — самый очевидный кандидат для юнит-тестирования (детерминированная функция от последовательности `now`-таймстемпов). Если будет решено добавлять тесты, понадобится вынести `performance.now` и `requestAnimationFrame` в инъектируемые зависимости.
+## Open Questions
+- **`alpha` parameter for render interpolation.** `architecture.md` mentions `onRender(alpha)` — the fraction of the next simulation step (`accumulator / STEP`), needed to smooth rendering on 144 Hz monitors. In the current module API `onRender` has no parameters. Whether to introduce `alpha` now or defer until noticeable jitter appears on high-refresh monitors — to be decided during `GameScene.draw` implementation.
+- **Behaviour on tab switch.** `requestAnimationFrame` in an inactive tab is suspended by the browser; on return we get one frame with a huge delta. The current design simply loses this time. Alternative — listen to `document.visibilitychange` and explicitly "freeze" the game (transition to `PauseScene`). This is outside the module's responsibility, but the API should be convenient for external management.
+- **Value of `MAX_STEPS_PER_FRAME = 8`** — chosen by intuition; it may make sense to move it to `config.SIMULATION` alongside `MAX_FRAME_TIME` for uniform tuning.
+- **Tests.** By the general decision (`architecture.md`) there are no tests, but the game loop is the most obvious unit-testing candidate (a deterministic function of a sequence of `now` timestamps). If tests are added, `performance.now` and `requestAnimationFrame` would need to be injectable dependencies.

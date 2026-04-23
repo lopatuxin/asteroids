@@ -1,114 +1,114 @@
-# Модуль — renderer
+# Module — renderer
 
-## Назначение
+## Purpose
 
-Модуль предоставляет набор чистых функций-утилит для рисования векторных примитивов на `CanvasRenderingContext2D` в ретро-стиле Atari Asteroids 1979 — белые линии единичной толщины на чёрном фоне, моноширинный текст, никаких спрайтов и заливок. Здесь же централизована стратегия wrap-around отрисовки: сущности, находящиеся ближе своего радиуса к границе экрана-тора, дорисовываются дополнительными копиями со смещением на размер канваса — чтобы «переезд» через край был бесшовным. Без этого модуля каждая сущность (`Ship`, `Asteroid`, `Ufo`, `Bullet`, `Particle`) вынуждена была бы дублировать низкоуровневый canvas-код и отдельно решать проблему отрисовки у края экрана.
+The module provides a set of pure utility functions for drawing vector primitives on `CanvasRenderingContext2D` in the retro style of Atari Asteroids 1979 — white single-pixel lines on a black background, monospace text, no sprites or fills. It also centralises the wrap-around drawing strategy: entities that are closer to the screen-torus border than their radius are redrawn with additional copies offset by the canvas size, so that "crossing" the edge is seamless. Without this module every entity (`Ship`, `Asteroid`, `Ufo`, `Bullet`, `Particle`) would have to duplicate low-level canvas code and separately solve the problem of drawing near the screen edge.
 
-## Ответственности
+## Responsibilities
 
-- Предоставление примитивов рисования: заливка фона, полилиния/многоугольник, контур круга, треугольник корабля, точка, текст.
-- Установка и фиксация визуального стиля «белые линии на чёрном» в одном месте: `strokeStyle`, `lineWidth`, `fillStyle` для текста, семейство и размер шрифта.
-- Реализация helper-а `withWrap(ctx, position, radius, draw)`, который вызывает переданный callback для основной позиции и до трёх дополнительных смещений, если сущность близка к границе канваса-тора.
-- Чистые функции без состояния: все утилиты принимают `ctx` первым параметром и не хранят ничего между вызовами.
-- Согласованность с размерами поля: чтение `CANVAS.WIDTH` и `CANVAS.HEIGHT` из модуля `config` для корректного wrap-offset.
+- Providing drawing primitives: background fill, polyline/polygon, circle outline, ship triangle, point, text.
+- Fixing and centralising the "white lines on black" visual style in one place: `strokeStyle`, `lineWidth`, `fillStyle` for text, font family and size.
+- Implementing the `withWrap(ctx, position, radius, draw)` helper, which invokes the provided callback for the primary position and up to three additional offsets when the entity is close to the border of the canvas-torus.
+- Pure stateless functions: all utilities take `ctx` as their first parameter and store nothing between calls.
+- Consistency with field dimensions: reading `CANVAS.WIDTH` and `CANVAS.HEIGHT` from the `config` module for correct wrap offsets.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не содержит игровой логики: не знает про сущности (`Ship`, `Asteroid` и т.п.), не читает и не пишет их поля помимо тех, что переданы в аргументах.
-- Не управляет циклом отрисовки: не вызывает `requestAnimationFrame`, не очищает экран сам по себе между кадрами (это делает вызывающая сцена через `clearScreen`).
-- Не создаёт и не владеет `<canvas>`-элементом и контекстом — их создаёт `Bootstrap`, сюда передаётся готовый `ctx`.
-- Не выполняет трансформаций сцены (камера, зум, масштабирование) — координаты принимаются в пиксельном пространстве канваса.
-- Не занимается коллизиями, физикой, wrap-ом координат самих сущностей (это делают `vec2-math.wrapVec2` и сами сущности в `update`). `withWrap` — только про отрисовку.
-- Не рисует сложных композитных сущностей (корабль с пламенем тяги, НЛО-силуэт целиком) — это собирается в `draw(ctx)` самой сущности из примитивов модуля.
-- Не кеширует подготовленные пути, offscreen-канвасы, градиенты — преждевременная оптимизация, не нужна на ожидаемом объёме графики.
+- Contains no game logic: knows nothing about entities (`Ship`, `Asteroid`, etc.), does not read or write their fields beyond what is passed as arguments.
+- Does not manage the rendering loop: does not call `requestAnimationFrame`, does not clear the screen on its own between frames (that is done by the calling scene via `clearScreen`).
+- Does not create or own the `<canvas>` element or the context — those are created by `Bootstrap`; a ready `ctx` is passed in.
+- Does not perform scene transformations (camera, zoom, scaling) — coordinates are accepted in the canvas pixel space.
+- Does not handle collisions, physics, or coordinate wrapping of entities themselves (that is done by `vec2-math.wrapVec2` and the entities in `update`). `withWrap` is only about rendering.
+- Does not draw complex composite entities (ship with thruster flame, full UFO silhouette) — those are assembled in the entity's own `draw(ctx)` from module primitives.
+- Does not cache prepared paths, offscreen canvases, or gradients — premature optimisation, unnecessary at the expected graphics volume.
 
-## Публичный интерфейс
+## Public Interface
 
-Все функции — именованные экспорты из `src/renderer.ts`. Первый параметр всегда `ctx: CanvasRenderingContext2D`. Модуль состояния не имеет.
+All functions are named exports from `src/renderer.ts`. The first parameter is always `ctx: CanvasRenderingContext2D`. The module has no state.
 
-- `clearScreen(ctx): void` — заливает весь канвас чёрным (`fillStyle = COLOR_BG`, `fillRect(0, 0, WIDTH, HEIGHT)`). Вызывается один раз в начале каждого кадра активной сценой.
-- `drawPolyline(ctx, points: Vec2[], closed: boolean = true): void` — рисует ломаную по массиву точек. Если `closed === true` — замыкает в многоугольник (используется для астероидов, корабля, силуэта НЛО); если `false` — открытая полилиния (линия пламени тяги, debug-линии).
-- `drawCircleOutline(ctx, center: Vec2, radius: number): void` — рисует контур круга (`ctx.arc` + `stroke`). Используется для debug-визуализации радиусов коллизий и, при необходимости, для стилизованных элементов НЛО.
-- `drawTriangle(ctx, center: Vec2, heading: number, size: number): void` — рисует треугольный силуэт корабля с вершиной по направлению `heading` (радианы) и общим размером `size` (расстояние от центра до носа, в пикселях). Внутри сводится к построению трёх точек и вызову `drawPolyline(ctx, points, true)` — конкретный алгоритм см. в «Ключевых потоках».
-- `drawPoint(ctx, p: Vec2, size: number = 1): void` — рисует точку (маленький квадратик `fillRect` размером `size × size` с центром в `p`). Используется для пуль и частиц, где полноценный круг избыточен.
-- `drawText(ctx, text: string, p: Vec2, options?: { align?: CanvasTextAlign; size?: number; color?: string }): void` — рисует строку моноширинным шрифтом. По умолчанию: `align = 'left'`, `size = 16`, `color = COLOR_FG` (`'#fff'`). Собирает `ctx.font = "${size}px monospace"`, выставляет `textAlign`, `fillStyle`, вызывает `fillText(text, p.x, p.y)`.
-- `withWrap(ctx, position: Vec2, radius: number, draw: (offset: Vec2) => void): void` — вызывает `draw(ZERO)` для основной позиции и дополнительно вызывает `draw(offset)` для каждой границы, к которой сущность ближе `radius`. Возможные смещения: `(±WIDTH, 0)`, `(0, ±HEIGHT)`, `(±WIDTH, ±HEIGHT)` — итого до 3 дополнительных вызовов (углы).
+- `clearScreen(ctx): void` — fills the entire canvas with black (`fillStyle = COLOR_BG`, `fillRect(0, 0, WIDTH, HEIGHT)`). Called once at the start of each frame by the active scene.
+- `drawPolyline(ctx, points: Vec2[], closed: boolean = true): void` — draws a polyline through an array of points. If `closed === true` — closes it into a polygon (used for asteroids, the ship, the UFO silhouette); if `false` — an open polyline (thruster flame line, debug lines).
+- `drawCircleOutline(ctx, center: Vec2, radius: number): void` — draws a circle outline (`ctx.arc` + `stroke`). Used for debug visualisation of collision radii and, if needed, for stylised UFO elements.
+- `drawTriangle(ctx, center: Vec2, heading: number, size: number): void` — draws the ship's triangular silhouette with its tip in the `heading` direction (radians) and overall `size` (distance from centre to nose, in pixels). Internally reduces to constructing three points and calling `drawPolyline(ctx, points, true)` — see Key Flows for the exact algorithm.
+- `drawPoint(ctx, p: Vec2, size: number = 1): void` — draws a point (a small `fillRect` square of `size × size` centred at `p`). Used for bullets and particles, where a full circle is excessive.
+- `drawText(ctx, text: string, p: Vec2, options?: { align?: CanvasTextAlign; size?: number; color?: string }): void` — draws a string in monospace font. Defaults: `align = 'left'`, `size = 16`, `color = COLOR_FG` (`'#fff'`). Sets `ctx.font = "${size}px monospace"`, applies `textAlign`, `fillStyle`, calls `fillText(text, p.x, p.y)`.
+- `withWrap(ctx, position: Vec2, radius: number, draw: (offset: Vec2) => void): void` — calls `draw(ZERO)` for the primary position and additionally calls `draw(offset)` for each border the entity is closer to than `radius`. Possible offsets: `(±WIDTH, 0)`, `(0, ±HEIGHT)`, `(±WIDTH, ±HEIGHT)` — up to 3 additional calls (corners).
 
-Типы: `Vec2` импортируется из `vec2-math`. `CanvasTextAlign` — встроенный DOM-тип.
+Types: `Vec2` is imported from `vec2-math`. `CanvasTextAlign` is a built-in DOM type.
 
-## Модель данных
+## Data Model
 
-Модуль не владеет долгоживущими данными. Форма публичных значений:
+The module owns no long-lived data. Shape of public values:
 
-**Внутренние константы стиля** (экспортируются при необходимости, иначе — приватные):
+**Internal style constants** (exported if needed, otherwise private):
 
-| Имя | Тип | Значение | Назначение |
+| Name | Type | Value | Purpose |
 |---|---|---|---|
-| `COLOR_BG` | string | `'#000'` | цвет фона канваса |
-| `COLOR_FG` | string | `'#fff'` | цвет всех линий и текста по умолчанию |
-| `LINE_WIDTH` | number | `1` | толщина линии для всех примитивов |
-| `FONT_FAMILY` | string | `'monospace'` | семейство шрифта для `drawText` |
-| `FONT_SIZE_DEFAULT` | number | `16` | размер шрифта по умолчанию в `drawText` |
+| `COLOR_BG` | string | `'#000'` | canvas background colour |
+| `COLOR_FG` | string | `'#fff'` | default colour for all lines and text |
+| `LINE_WIDTH` | number | `1` | line width for all primitives |
+| `FONT_FAMILY` | string | `'monospace'` | font family for `drawText` |
+| `FONT_SIZE_DEFAULT` | number | `16` | default font size in `drawText` |
 
-Решение о месте констант: держим их в `renderer.ts` как приватные модульные константы. Выносить в `config` не имеет смысла — это не параметры баланса, они не подлежат тюнингу, а тесно привязаны к реализации модуля. Если позже понадобится тема (например, «зелёный фосфор» вместо белого) — константы поднимутся в `config` одним коммитом.
+Decision on constant location: kept in `renderer.ts` as private module constants. Moving them to `config` makes no sense — these are not balance parameters, they are not subject to tuning, and they are tightly coupled to the module's implementation. If a theme is needed later (e.g. "green phosphor" instead of white) — the constants will be promoted to `config` in a single commit.
 
-**Аргумент `options` в `drawText`**:
+**`options` argument in `drawText`**:
 
-| Поле | Тип | Default | Назначение |
+| Field | Type | Default | Purpose |
 |---|---|---|---|
-| `align` | `CanvasTextAlign` | `'left'` | горизонтальное выравнивание (`'left' \| 'center' \| 'right'`) |
-| `size` | number | `16` | кегль шрифта в пикселях |
-| `color` | string | `'#fff'` | цвет текста (на случай редких отклонений — например, мигающий «PRESS START» можно переключать между `'#fff'` и `'#888'`) |
+| `align` | `CanvasTextAlign` | `'left'` | horizontal alignment (`'left' \| 'center' \| 'right'`) |
+| `size` | number | `16` | font size in pixels |
+| `color` | string | `'#fff'` | text colour (for rare deviations — e.g. a blinking "PRESS START" can alternate between `'#fff'` and `'#888'`) |
 
-Состояния, индексов, связей у модуля нет.
+The module has no state, indexes, or relations.
 
-## Ключевые потоки
+## Key Flows
 
-**Очистка экрана и отрисовка кадра.** `GameScene.draw(ctx)` в начале каждого кадра вызывает `clearScreen(ctx)` — канвас заливается чёрным. Далее сцена последовательно обходит свои сущности (корабль, астероиды, пули, НЛО, частицы) и вызывает у каждой `entity.draw(ctx)`. Сущность внутри `draw` обращается к утилитам модуля — `drawPolyline`, `drawTriangle`, `drawPoint`. В конце сцена рисует HUD через `drawText` (счёт, жизни, номер волны). Модуль `renderer` здесь — чистая библиотека примитивов, порядок и состав вызовов полностью определяется сценой.
+**Clearing the screen and rendering a frame.** `GameScene.draw(ctx)` at the start of each frame calls `clearScreen(ctx)` — the canvas is filled with black. Then the scene iterates its entities (ship, asteroids, bullets, UFOs, particles) and calls `entity.draw(ctx)` on each. The entity inside `draw` calls module utilities — `drawPolyline`, `drawTriangle`, `drawPoint`. Finally the scene draws the HUD via `drawText` (score, lives, wave number). The `renderer` module here is a pure primitive library; the order and composition of calls is entirely determined by the scene.
 
-**Построение треугольника корабля `drawTriangle(ctx, center, heading, size)`.** Функция вычисляет три вершины локального треугольника: нос в точке `(size, 0)`, и две задние вершины, симметричные относительно оси направления — примерно `(-size * 0.7, ±size * 0.6)` (точные коэффициенты — на этапе реализации, ретро-силуэт). Каждая локальная точка поворачивается на угол `heading` через `rotate` из `vec2-math` и сдвигается на `center`. Получившийся массив из трёх `Vec2` передаётся в `drawPolyline(ctx, points, true)`. Никакой работы с `ctx.translate/rotate` — вычисление делается в координатах, `ctx` используется только для рисования: это проще для wrap-отрисовки (см. ниже) и не оставляет «протекающих» трансформаций в контексте.
+**Building the ship triangle `drawTriangle(ctx, center, heading, size)`.** The function computes three vertices of a local triangle: the nose at `(size, 0)`, and two rear vertices symmetrical about the heading axis — approximately `(-size * 0.7, ±size * 0.6)` (exact coefficients determined at implementation, retro silhouette). Each local point is rotated by `heading` using `rotate` from `vec2-math` and shifted by `center`. The resulting array of three `Vec2` values is passed to `drawPolyline(ctx, points, true)`. No `ctx.translate/rotate` is used — computation is done in coordinates, `ctx` is used only for drawing: this is simpler for wrap rendering (see below) and leaves no "leaking" transforms in the context.
 
-**Wrap-отрисовка через `withWrap`.** Сущность в своём `draw(ctx)` вызывает `withWrap(ctx, this.position, this.radius, (offset) => { /* рисование со смещением */ })`. Внутри `withWrap`:
-1. Вычисляется набор необходимых смещений: пустое множество по умолчанию; если `position.x < radius` — добавить `+WIDTH` к оффсету-x; если `position.x > WIDTH - radius` — добавить `-WIDTH`; аналогично для `y`. На выходе — 0, 1, 2 или 3 ненулевых смещения (последнее — при близости к углу).
-2. Всегда делается вызов `draw({x: 0, y: 0})` для основной позиции.
-3. Для каждого ненулевого смещения делается дополнительный вызов `draw(offset)`. Callback ответственен за то, чтобы учесть `offset` в координатах примитивов (например, `drawPolyline(ctx, points.map(p => ({x: p.x + offset.x, y: p.y + offset.y})), true)`).
+**Wrap rendering via `withWrap`.** An entity in its `draw(ctx)` calls `withWrap(ctx, this.position, this.radius, (offset) => { /* draw with offset */ })`. Inside `withWrap`:
+1. The set of required offsets is computed: empty set by default; if `position.x < radius` — add `+WIDTH` to the x-offset; if `position.x > WIDTH - radius` — add `-WIDTH`; analogously for `y`. The output is 0, 1, 2, or 3 non-zero offsets (the last case near a corner).
+2. `draw({x: 0, y: 0})` is always called for the primary position.
+3. For each non-zero offset an additional `draw(offset)` call is made. The callback is responsible for applying `offset` to the primitive coordinates (e.g. `drawPolyline(ctx, points.map(p => ({x: p.x + offset.x, y: p.y + offset.y})), true)`).
 
-Альтернатива — использовать `ctx.save/translate/restore` внутри `withWrap`, чтобы callback не заботился об offset. Такое решение короче в вызывающем коде, но требует, чтобы рисующий код был написан в локальных координатах сущности. Предпочитаем явный `offset`-callback: сущности у нас всё равно хранят мировые координаты, и прибавить `offset` к готовым точкам — тривиально, а риск «забыть `restore`» исчезает.
+Alternative — using `ctx.save/translate/restore` inside `withWrap` so the callback doesn't need to handle the offset. That solution is shorter in calling code but requires the drawing code to be written in the entity's local coordinates. The explicit offset-callback is preferred: entities already store world coordinates, and adding `offset` to ready-made points is trivial, while the risk of "forgetting `restore`" disappears.
 
-**Отрисовка HUD-текста.** `GameScene.draw` в конце кадра вызывает `drawText(ctx, "SCORE " + score, {x: 16, y: 24}, { size: 20 })` и аналогичные строки для жизней и волны. `GameOverScene` рисует `drawText(ctx, "GAME OVER", {x: WIDTH/2, y: HEIGHT/2}, { align: 'center', size: 48 })` и таблицу рекордов построчно. Каждый вызов самодостаточен — сам выставляет `font`, `textAlign`, `fillStyle`; заботиться о порядке между вызовами не нужно.
+**Drawing HUD text.** `GameScene.draw` at the end of a frame calls `drawText(ctx, "SCORE " + score, {x: 16, y: 24}, { size: 20 })` and similar lines for lives and wave. `GameOverScene` renders `drawText(ctx, "GAME OVER", {x: WIDTH/2, y: HEIGHT/2}, { align: 'center', size: 48 })` and the score table line by line. Each call is self-contained — it sets `font`, `textAlign`, `fillStyle` itself; no need to care about ordering between calls.
 
-## Зависимости
+## Dependencies
 
-- **`vec2-math`** — тип `Vec2`, функция `rotate` (для поворота вершин треугольника корабля). Без состояния, чистые функции.
-- **`config`** — константы `CANVAS.WIDTH` и `CANVAS.HEIGHT`: нужны исключительно внутри `withWrap` для вычисления смещений по границам тора. Больше ничего из `config` не читается.
-- **Стандартное браузерное API `CanvasRenderingContext2D`** — через переданный первым аргументом контекст. Модуль не создаёт контекст сам.
+- **`vec2-math`** — the `Vec2` type, the `rotate` function (for rotating ship triangle vertices). Stateless pure functions.
+- **`config`** — constants `CANVAS.WIDTH` and `CANVAS.HEIGHT`: needed exclusively inside `withWrap` for computing offsets at the torus borders. Nothing else from `config` is read.
+- **Standard browser API `CanvasRenderingContext2D`** — via the context passed as the first argument. The module does not create the context itself.
 
-Обратных зависимостей не имеет. Его импортируют: `Ship`, `Asteroid`, `Bullet`, `Ufo`, `Particle`, все сцены (`MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`).
+Has no reverse dependencies. Importers include: `Ship`, `Asteroid`, `Bullet`, `Ufo`, `Particle`, all scenes (`MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`).
 
-## Обработка ошибок
+## Error Handling
 
-- **Пустой массив точек в `drawPolyline`.** Сценарий: вызывающий код передал `points = []`. Реакция: функция ничего не рисует и возвращается без ошибок. Внутри реализация начинается с `if (points.length < 2) return;` — `moveTo/lineTo` по одной точке бессмысленны, исключения кидать не нужно, это graceful no-op.
-- **Отрицательный или нулевой `radius` в `drawCircleOutline` / `withWrap`.** Контрактное нарушение; в dev-сборке визуально проявится как ничего не нарисованное / странное поведение wrap-а, в проде — то же самое. Рантайм-проверок не делаем: типы и инварианты сущностей гарантируют положительный радиус.
-- **Недопустимые координаты (`NaN`, `Infinity`) в позиции.** Не фильтруются. Canvas 2D сам безопасно игнорирует примитивы с `NaN`-координатами (ничего не рисует и не ломает контекст). Корень проблемы — баг в физике; его надо ловить в `update`, а не затенять здесь.
-- **Downstream-сбой браузера.** `CanvasRenderingContext2D` не бросает исключений в нормальных сценариях; контекст может быть `null` только на этапе инициализации, и это проверяется в `Bootstrap`, а не здесь.
-- **Частичный успех.** Неприменимо: каждая функция атомарна в рамках одного кадра, рисование нескольких примитивов — это серия независимых вызовов из сцены.
-- **Ошибки выше по стеку.** Исключение, случайно брошенное из `draw` сущности, ловится верхнеуровневым try/catch игрового цикла (см. архитектурную секцию «Обработка ошибок») и приводит к переходу в `MenuScene` — модуль `renderer` сам ничего наружу не выбрасывает.
+- **Empty point array in `drawPolyline`.** Scenario: calling code passes `points = []`. Response: the function draws nothing and returns without errors. Internally the implementation starts with `if (points.length < 2) return;` — `moveTo/lineTo` for a single point is meaningless, throwing an exception is unnecessary, this is a graceful no-op.
+- **Negative or zero `radius` in `drawCircleOutline` / `withWrap`.** A contract violation; in a dev build it will manifest visually as nothing drawn / strange wrap behaviour, same in prod. No runtime checks: types and entity invariants guarantee a positive radius.
+- **Invalid coordinates (`NaN`, `Infinity`) in position.** Not filtered. Canvas 2D itself safely ignores primitives with `NaN` coordinates (draws nothing and does not corrupt the context). The root of the problem is a bug in physics; it should be caught in `update`, not hidden here.
+- **Downstream browser failure.** `CanvasRenderingContext2D` does not throw exceptions in normal scenarios; the context can only be `null` during initialisation, and that is checked in `Bootstrap`, not here.
+- **Partial success.** Not applicable: each function is atomic within a single frame; drawing several primitives is a series of independent calls from the scene.
+- **Errors further up the stack.** An exception accidentally thrown from an entity's `draw` is caught by the game loop's top-level try/catch (see the architecture "Error Handling" section) and results in a transition to `MenuScene` — the `renderer` module itself throws nothing externally.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript + `CanvasRenderingContext2D`.** Заданы архитектурой. Никаких библиотек рендера (Pixi, Konva, Two.js) — объём графики тривиален, встроенного Canvas 2D достаточно.
-- **Функциональный стиль, без классов.** Модуль — набор чистых функций; класс-обёртка `Renderer` с методами не даёт выигрыша (состояния всё равно нет), зато добавляет шум при импортах.
-- **Шрифт — системный `monospace` через `ctx.font`.** Без подключения внешних шрифтов (`@font-face`, Google Fonts) — ретро-стиль сохраняется любым системным моноширинным шрифтом, зависимостей и этапа загрузки нет.
-- **Никаких offscreen-канвасов / пулов путей.** GC-давление и overdraw на этом масштабе (десятки линий на кадр) ничтожны; преждевременная оптимизация не оправдана.
+- **TypeScript + `CanvasRenderingContext2D`.** Dictated by the architecture. No render libraries (Pixi, Konva, Two.js) — the graphics volume is trivial, built-in Canvas 2D is sufficient.
+- **Functional style, no classes.** The module is a set of pure functions; a `Renderer` wrapper class with methods gives no benefit (there is no state anyway), and only adds noise to imports.
+- **Font — system `monospace` via `ctx.font`.** No external fonts (`@font-face`, Google Fonts) — the retro style is preserved by any system monospace font, no dependencies or loading stage.
+- **No offscreen canvases / path pools.** GC pressure and overdraw at this scale (tens of lines per frame) are negligible; premature optimisation is not justified.
 
-## Конфигурация
+## Configuration
 
-Внешних переменных окружения, секретов и рантайм-настроек у модуля нет. Всё, что можно назвать «конфигом», — это приватные константы стиля, перечисленные в секции «Модель данных» (`COLOR_BG`, `COLOR_FG`, `LINE_WIDTH`, `FONT_FAMILY`, `FONT_SIZE_DEFAULT`). Размеры канваса `CANVAS.WIDTH` / `CANVAS.HEIGHT` читаются из модуля `config` (см. «Зависимости»). Для смены темы или размера поля — править либо `config`, либо модульные константы `renderer.ts`, пересборка бандла.
+The module has no environment variables, secrets, or runtime settings. Everything that could be called "config" is the private style constants listed in the Data Model section (`COLOR_BG`, `COLOR_FG`, `LINE_WIDTH`, `FONT_FAMILY`, `FONT_SIZE_DEFAULT`). Canvas dimensions `CANVAS.WIDTH` / `CANVAS.HEIGHT` are read from the `config` module (see Dependencies). To change the theme or field size — edit either `config` or the module constants in `renderer.ts` and rebuild the bundle.
 
-## Открытые вопросы
+## Open Questions
 
-- Реализация `drawTriangle`: собирать через `drawPolyline` с тремя точками или через прямые `moveTo/lineTo`? Предпочтение — через `drawPolyline`, чтобы не дублировать стиль и стратегию обводки; финальное решение — на этапе кодирования, если профиль кадра покажет неожиданную стоимость создания массива из трёх литералов.
-- Хранить ли `COLOR_FG`/`COLOR_BG` здесь или поднять в `config` сразу — зависит от того, захотим ли в будущем «темы» (зелёный фосфор, янтарный фосфор). Пока держим в `renderer.ts` и поднимем, если появится вторая тема.
-- `withWrap` с offset-callback vs. `ctx.save/translate/restore` — выбран offset-callback; если в вызывающем коде регулярно возникнет необходимость поворотов/масштабирования перед рисованием (например, вращающийся астероид), возможно, стоит предоставить альтернативный helper `withWrapTransform` поверх `ctx.translate`.
-- Нужен ли отдельный `drawCircleFilled` (заполненный круг) — в MVP-сценариях не видно применения; если частицы пойдут с заливкой вместо точки, добавим.
-- Размер `drawPoint` по умолчанию (`1`): на HiDPI-экранах пиксель может быть слишком тонким. Вопрос упирается в то, будем ли учитывать `devicePixelRatio` при инициализации канваса (это решается в `Bootstrap`, не здесь). Пока фиксируем `1` и возвращаемся к вопросу при появлении жалоб на читаемость.
+- Implementation of `drawTriangle`: assemble via `drawPolyline` with three points, or via direct `moveTo/lineTo`? Preference — via `drawPolyline`, to avoid duplicating style and stroke strategy; final decision at the coding stage, if the frame profile shows unexpected cost from creating an array of three literals.
+- Whether to keep `COLOR_FG`/`COLOR_BG` here or promote them to `config` immediately — depends on whether we want "themes" in the future (green phosphor, amber phosphor). For now, kept in `renderer.ts` and will be promoted if a second theme appears.
+- `withWrap` with offset-callback vs. `ctx.save/translate/restore` — offset-callback chosen; if calling code regularly needs rotations/scaling before drawing (e.g. a rotating asteroid), a `withWrapTransform` helper on top of `ctx.translate` may be provided.
+- Whether a separate `drawCircleFilled` (filled circle) is needed — no use case visible in MVP scenarios; if particles go with fill instead of a point, it will be added.
+- Default `drawPoint` size (`1`): on HiDPI displays a pixel may be too thin. The question hinges on whether we account for `devicePixelRatio` during canvas initialisation (that is resolved in `Bootstrap`, not here). For now, fixing at `1` and revisiting when readability complaints appear.

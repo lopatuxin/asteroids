@@ -1,161 +1,161 @@
-# Модуль — ui-scenes (MenuScene, PauseScene, GameOverScene)
+# Module — ui-scenes (MenuScene, PauseScene, GameOverScene)
 
-## Назначение
+## Purpose
 
-Модуль объединяет три вспомогательные сцены, окружающие `GameScene`: стартовое меню (`MenuScene`), оверлей паузы (`PauseScene`) и экран завершения партии (`GameOverScene`). Каждая из них короткая — чисто текстовый экран со статичной разметкой и минимальной логикой, поэтому держать их в одном модуле экономнее, чем раскладывать по трём. Без этих сцен у игры не было бы входа (нельзя запустить партию из чистого состояния), обратимой паузы и корректного финала с сохранением рекорда — то есть не замкнулся бы жизненный цикл «меню → игра → пауза ↔ игра → game over → меню».
+The module combines the three auxiliary scenes surrounding `GameScene`: the start menu (`MenuScene`), the pause overlay (`PauseScene`), and the end-of-session screen (`GameOverScene`). Each is short — a purely text screen with a static layout and minimal logic — so keeping them in one module is more economical than spreading them across three files. Without these scenes the game would have no entry point (no way to start a session from a clean state), no reversible pause, and no proper finale with high-score saving — meaning the lifecycle "menu → game → pause ↔ game → game over → menu" would never close.
 
-## Ответственности
+## Responsibilities
 
-- Реализация интерфейса `Scene` из `scene-manager` для трёх экранов: `enter / exit / update / draw`, опциональный флаг `drawBelow`.
-- `MenuScene`: показ заголовка игры, подсказки «PRESS ENTER», таблицы топ-10 рекордов; запуск новой партии по `Confirm`.
-- `PauseScene`: полупрозрачный оверлей поверх замороженной `GameScene` с надписью «PAUSED»; возврат в игру по `Pause` или `Confirm`.
-- `GameOverScene`: показ финального счёта, попытка сабмита в таблицу рекордов, аркадный ввод 3-символьного имени при попадании в топ, затем показ таблицы и возврат в меню по `Confirm`.
-- Маршрутизация между сценами через `SceneManager` (`replace` для однонаправленных переходов, `pop` — для выхода из паузы).
-- Чтение и отображение данных `HighScoreStorage` (в `MenuScene` и `GameOverScene`).
-- Интерпретация ввода `InputSystem` в терминах UI-навигации (подтверждение, отмена, движение курсора по буквам имени).
+- Implementing the `Scene` interface from `scene-manager` for three screens: `enter / exit / update / draw`, optional `drawBelow` flag.
+- `MenuScene`: showing the game title, a "PRESS ENTER" hint, and the top-10 high-score table; starting a new session on `Confirm`.
+- `PauseScene`: semi-transparent overlay on top of the frozen `GameScene` with a "PAUSED" label; returning to the game on `Pause` or `Confirm`.
+- `GameOverScene`: showing the final score, attempting to submit to the high-score table, arcade-style 3-character name entry if the score ranked in the top, then showing the table and returning to the menu on `Confirm`.
+- Scene routing via `SceneManager` (`replace` for one-way transitions, `pop` for exiting the pause).
+- Reading and displaying `HighScoreStorage` data (in `MenuScene` and `GameOverScene`).
+- Interpreting `InputSystem` input in terms of UI navigation (confirm, cancel, moving the name-entry cursor).
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не хранят и не обновляют игровые сущности (`Ship`, `Asteroid`, …) — ими владеет `GameScene`.
-- Не работают с `localStorage` напрямую — только через `HighScoreStorage`.
-- Не управляют стеком сцен — вызывают готовые методы `SceneManager.push / pop / replace`, но не имитируют их.
-- Не реализуют анимации переходов, fade-эффекты, спрайты и звук.
-- Не слушают DOM-события клавиатуры — читают состояние только через `InputSystem` в `update`.
-- Не настраивают биндинги клавиш — используют готовые `Action`-константы.
-- Не валидируют и не нормализуют имя игрока перед сабмитом — это обязанность `HighScoreStorage`.
-- `PauseScene` не решает, что значит «пауза» для мира — просто не апдейтит лежащую под ней сцену (это делает `SceneManager`, вызывая `update` только у верхней).
+- Do not store or update game entities (`Ship`, `Asteroid`, …) — those are owned by `GameScene`.
+- Do not access `localStorage` directly — only through `HighScoreStorage`.
+- Do not manage the scene stack — they call ready-made `SceneManager.push / pop / replace` methods, but do not imitate them.
+- Do not implement transition animations, fade effects, sprites, or sound.
+- Do not listen to DOM keyboard events — read state only through `InputSystem` in `update`.
+- Do not configure key bindings — use pre-defined `Action` constants.
+- Do not validate or normalise the player name before submission — that is `HighScoreStorage`'s responsibility.
+- `PauseScene` does not decide what "pause" means for the world — it simply does not update the scene below it (that is handled by `SceneManager`, which only calls `update` on the top scene).
 
-## Публичный интерфейс
+## Public Interface
 
-Модуль экспортирует три класса, каждый реализует `Scene`.
+The module exports three classes, each implementing `Scene`.
 
 **`class MenuScene implements Scene`**
 - `drawBelow = false`.
-- `constructor(deps: { sceneManager: SceneManager, highScores: HighScoreStorage })` — зависимости инжектятся снаружи.
-- `enter(): void` — подгружает рекорды: `this.scores = highScores.load()`.
+- `constructor(deps: { sceneManager: SceneManager, highScores: HighScoreStorage })` — dependencies injected from outside.
+- `enter(): void` — loads the high scores: `this.scores = highScores.load()`.
 - `exit(): void` — no-op.
-- `update(dt: number, input: InputSystem): void` — если `input.wasPressed('Confirm')` → `sceneManager.replace(new GameScene(...))`. `Pause` / `Escape` явно игнорируются (no-op), чтобы из меню нельзя было уйти в пустой стек.
-- `draw(ctx: CanvasRenderingContext2D): void` — заливка фона, заголовок «ASTEROIDS» по центру сверху, подсказка «PRESS ENTER» ниже, таблица рекордов (ранг, имя, счёт) по центру внизу.
+- `update(dt: number, input: InputSystem): void` — if `input.wasPressed('Confirm')` → `sceneManager.replace(new GameScene(...))`. `Pause` / `Escape` are explicitly ignored (no-op) to prevent transitioning to an empty stack from the menu.
+- `draw(ctx: CanvasRenderingContext2D): void` — background fill, "ASTEROIDS" title centred at the top, "PRESS ENTER" hint below, high-score table (rank, name, score) centred at the bottom.
 
 **`class PauseScene implements Scene`**
-- `drawBelow = true` — `SceneManager` сначала рисует лежащую снизу `GameScene` (последний её кадр — мир заморожен), затем эту сцену поверх.
+- `drawBelow = true` — `SceneManager` first draws the `GameScene` below (its last frame — the world is frozen), then draws this scene on top.
 - `constructor(deps: { sceneManager: SceneManager })`.
 - `enter(): void` — no-op.
 - `exit(): void` — no-op.
-- `update(dt: number, input: InputSystem): void` — если `input.wasPressed('Pause')` **или** `input.wasPressed('Confirm')` → `sceneManager.pop()`.
-- `draw(ctx: CanvasRenderingContext2D): void` — `ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H)` для затемнения кадра `GameScene`, затем `drawText` «PAUSED» по центру.
+- `update(dt: number, input: InputSystem): void` — if `input.wasPressed('Pause')` **or** `input.wasPressed('Confirm')` → `sceneManager.pop()`.
+- `draw(ctx: CanvasRenderingContext2D): void` — `ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, W, H)` to darken the `GameScene` frame, then `drawText` "PAUSED" centred.
 
 **`class GameOverScene implements Scene`**
 - `drawBelow = false`.
-- `constructor(deps: { sceneManager: SceneManager, highScores: HighScoreStorage }, snapshot: { score: number, wave: number })` — финальный снапшот партии приходит параметром отдельно от зависимостей.
-- `enter(): void` — пробует сабмитить рекорд с дефолтным именем-заглушкой `'AAA'`: `const res = highScores.trySubmit(snapshot.score, 'AAA')`. Если `res.accepted === true` — переходит в подрежим `'name'` (игрок будет вводить своё имя, которое затем перезапишет запись), сохраняет `pendingEntry` и `position`. Иначе — подгружает текущую таблицу `this.scores = highScores.load()` и сразу переходит в подрежим `'scores'`.
+- `constructor(deps: { sceneManager: SceneManager, highScores: HighScoreStorage }, snapshot: { score: number, wave: number })` — the final session snapshot arrives as a separate parameter alongside the deps.
+- `enter(): void` — attempts to submit the score with the default placeholder name `'AAA'`: `const res = highScores.trySubmit(snapshot.score, 'AAA')`. If `res.accepted === true` — transitions to `'name'` sub-mode (the player will enter their name, which will then overwrite the record), saves `pendingEntry` and `position`. Otherwise — loads the current table `this.scores = highScores.load()` and immediately transitions to `'scores'` sub-mode.
 - `exit(): void` — no-op.
-- `update(dt: number, input: InputSystem): void` — ветвится по текущему `mode` (см. «Ключевые потоки»).
-- `draw(ctx: CanvasRenderingContext2D): void` — заливка фона, «GAME OVER» по центру сверху, строка «SCORE: <n>». Далее в зависимости от `mode`: `'name'` — три клетки-плейсхолдера для букв с подсвеченной текущей позицией (`cursorPos`); `'scores'` — таблица рекордов с подсветкой свежей записи (`pendingEntry`), подсказка «PRESS ENTER» для возврата в меню.
+- `update(dt: number, input: InputSystem): void` — branches by current `mode` (see Key Flows).
+- `draw(ctx: CanvasRenderingContext2D): void` — background fill, "GAME OVER" centred at the top, "SCORE: <n>" line. Then depending on `mode`: `'name'` — three letter placeholder cells with the current position highlighted (`cursorPos`); `'scores'` — high-score table with the fresh entry highlighted (`pendingEntry`), a "PRESS ENTER" hint to return to the menu.
 
-Все три класса не имеют публичных методов сверх контракта `Scene`.
+All three classes have no public methods beyond the `Scene` contract.
 
-## Модель данных
+## Data Model
 
-Состояние живёт в памяти, ничего не персистится. Таблица ниже — поля экземпляров.
+State lives in memory; nothing is persisted. The table below shows instance fields.
 
 **`MenuScene`**
 
-| Поле | Тип | Назначение |
+| Field | Type | Purpose |
 |---|---|---|
-| `sceneManager` | `SceneManager` | для перехода в `GameScene`. |
-| `highScores` | `HighScoreStorage` | источник таблицы рекордов. |
-| `scores` | `ScoreEntry[]` | подгружается в `enter`, отображается в `draw`. |
+| `sceneManager` | `SceneManager` | for transitioning to `GameScene`. |
+| `highScores` | `HighScoreStorage` | source of the score table. |
+| `scores` | `ScoreEntry[]` | loaded in `enter`, displayed in `draw`. |
 
 **`PauseScene`**
 
-| Поле | Тип | Назначение |
+| Field | Type | Purpose |
 |---|---|---|
-| `sceneManager` | `SceneManager` | для `pop()` при возврате в игру. |
+| `sceneManager` | `SceneManager` | for `pop()` when returning to the game. |
 
 **`GameOverScene`**
 
-| Поле | Тип | Назначение |
+| Field | Type | Purpose |
 |---|---|---|
-| `sceneManager` | `SceneManager` | для перехода в `MenuScene`. |
-| `highScores` | `HighScoreStorage` | чтение и запись рекорда. |
-| `snapshot` | `{ score: number, wave: number }` | финальное состояние партии, получено из `GameScene`. |
-| `mode` | `'name' \| 'scores'` | текущий подрежим экрана. |
-| `scores` | `ScoreEntry[]` | актуальная таблица рекордов для отображения. |
-| `pendingEntry` | `ScoreEntry \| null` | ссылка на только что сохранённую запись (для подсветки в таблице). |
-| `position` | `number \| null` | позиция свежей записи в топ-10 (`0..9`). |
-| `cursorPos` | `0 \| 1 \| 2` | индекс редактируемого символа в подрежиме `'name'`. |
-| `finalName` | `string` (длина 3) | редактируемое имя, стартует с `'AAA'`. |
+| `sceneManager` | `SceneManager` | for transitioning to `MenuScene`. |
+| `highScores` | `HighScoreStorage` | reading and writing the high score. |
+| `snapshot` | `{ score: number, wave: number }` | final session state, received from `GameScene`. |
+| `mode` | `'name' \| 'scores'` | current screen sub-mode. |
+| `scores` | `ScoreEntry[]` | current score table for display. |
+| `pendingEntry` | `ScoreEntry \| null` | reference to the just-saved entry (for highlighting in the table). |
+| `position` | `number \| null` | position of the fresh entry in the top-10 (`0..9`). |
+| `cursorPos` | `0 \| 1 \| 2` | index of the character being edited in `'name'` sub-mode. |
+| `finalName` | `string` (length 3) | the name being edited, starts as `'AAA'`. |
 
-Связи: все три сцены живут не дольше одного нахождения на стеке; при `exit()` их состояние выбрасывается. `HighScoreStorage`, `SceneManager`, `InputSystem` — переживают сцены.
+Relations: all three scenes live no longer than their single time on the stack; their state is discarded on `exit()`. `HighScoreStorage`, `SceneManager`, `InputSystem` outlive the scenes.
 
-## Ключевые потоки
+## Key Flows
 
-### 1. Открытие меню
-Сразу после `bootstrap()`: `SceneManager.push(new MenuScene(...))`. В `enter()` сцена вызывает `highScores.load()` и кладёт результат в `this.scores`. Каждый тик `update` проверяет `wasPressed('Confirm')`; если да — `sceneManager.replace(new GameScene(...))`. Пока игрок не нажал Enter, сцена просто перерисовывается.
+### 1. Opening the menu
+Immediately after `bootstrap()`: `SceneManager.push(new MenuScene(...))`. In `enter()` the scene calls `highScores.load()` and stores the result in `this.scores`. Each tick `update` checks `wasPressed('Confirm')`; if so — `sceneManager.replace(new GameScene(...))`. Until the player presses Enter, the scene simply redraws.
 
-### 2. Постановка игры на паузу и выход из неё
-Во время `GameScene.update` игрок нажимает `Pause` → `GameScene` вызывает `sceneManager.push(new PauseScene(...))`. Со следующего тика `SceneManager` делегирует `update` только `PauseScene`; мир игры стоит. В `draw` благодаря `drawBelow = true` сначала перерисовывается последний кадр `GameScene`, потом поверх ложится полупрозрачный чёрный прямоугольник и текст «PAUSED». Когда игрок жмёт `Pause` или `Confirm`, `PauseScene.update` вызывает `sceneManager.pop()`; `SceneManager` снимает паузу и вызывает `handleResume` у `GameScene`, которая сбрасывает «залипший» `wasPressed('Pause')`.
+### 2. Pausing the game and returning
+During `GameScene.update` the player presses `Pause` → `GameScene` calls `sceneManager.push(new PauseScene(...))`. From the next tick `SceneManager` delegates `update` only to `PauseScene`; the game world is stopped. In `draw`, thanks to `drawBelow = true`, first the last `GameScene` frame is redrawn, then a semi-transparent black rectangle and the "PAUSED" text are overlaid. When the player presses `Pause` or `Confirm`, `PauseScene.update` calls `sceneManager.pop()`; `SceneManager` removes the pause and calls `handleResume` on `GameScene`, which resets the lingering `wasPressed('Pause')`.
 
-### 3. Завершение партии с попаданием в топ
-`GameScene` делает `sceneManager.replace(new GameOverScene({...}, snapshot))`. В `enter()` сцена инициирует `highScores.trySubmit(score, 'AAA')`. Предположим, `res.accepted === true` — значит, запись уже лежит в хранилище под именем `'AAA'` на позиции `res.position`. Сцена переходит в `mode = 'name'`, `cursorPos = 0`, `finalName = 'AAA'`. Игрок аркадным способом меняет символы: `wasPressed('RotateLeft')` / `wasPressed('RotateRight')` сдвигают `cursorPos` (по модулю 3), `wasPressed('Thrust')` сдвигает букву по текущей позиции вверх (`A → B → … → Z → A`), `wasPressed('Fire')` — вниз. Отрисовка показывает три клетки с подсвеченной текущей. Когда игрок нажимает `Confirm`, сцена повторяет сабмит: `highScores.trySubmit(score, finalName)` (это заменит старую запись `'AAA'` в топе корректным именем; старый сабмит с тем же счётом останется на одну строку ниже — см. «Открытые вопросы»). После этого `mode = 'scores'`, `this.scores = highScores.load()`, `pendingEntry` — последняя запись с этим именем и счётом.
+### 3. Session end with a top-10 ranking
+`GameScene` calls `sceneManager.replace(new GameOverScene({...}, snapshot))`. In `enter()` the scene initiates `highScores.trySubmit(score, 'AAA')`. Suppose `res.accepted === true` — meaning the record is already in storage under the name `'AAA'` at position `res.position`. The scene enters `mode = 'name'`, `cursorPos = 0`, `finalName = 'AAA'`. The player changes characters arcade-style: `wasPressed('RotateLeft')` / `wasPressed('RotateRight')` moves `cursorPos` (modulo 3), `wasPressed('Thrust')` cycles the letter at the current position upward (`A → B → … → Z → A`), `wasPressed('Fire')` — downward. Rendering shows three cells with the current one highlighted. When the player presses `Confirm`, the scene re-submits: `highScores.trySubmit(score, finalName)` (this replaces the `'AAA'` record in the top with the correct name; the old submission with the same score may remain one position below — see Open Questions). After this, `mode = 'scores'`, `this.scores = highScores.load()`, `pendingEntry` — the last entry with this name and score.
 
-### 4. Завершение партии без попадания в топ
-В `enter()` `trySubmit` возвращает `{ accepted: false, position: null }`. Сцена сразу грузит `this.scores = highScores.load()`, `mode = 'scores'`, `pendingEntry = null`. `draw` показывает «GAME OVER», финальный счёт и таблицу рекордов без подсветки. При `wasPressed('Confirm')` — `sceneManager.replace(new MenuScene(...))`.
+### 4. Session end without a top-10 ranking
+In `enter()`, `trySubmit` returns `{ accepted: false, position: null }`. The scene immediately loads `this.scores = highScores.load()`, `mode = 'scores'`, `pendingEntry = null`. `draw` shows "GAME OVER", the final score, and the high-score table without highlighting. On `wasPressed('Confirm')` — `sceneManager.replace(new MenuScene(...))`.
 
-### 5. Возврат из таблицы рекордов в меню
-В подрежиме `'scores'` любое `wasPressed('Confirm')` приводит к `sceneManager.replace(new MenuScene(...))`. Цикл «меню → игра → game over → меню» замыкается.
+### 5. Returning from the score table to the menu
+In `'scores'` sub-mode, any `wasPressed('Confirm')` leads to `sceneManager.replace(new MenuScene(...))`. The "menu → game → game over → menu" cycle closes.
 
-## Зависимости
+## Dependencies
 
-- **`scene-manager`** — интерфейс `Scene` (реализуют все три класса) и класс `SceneManager` (вызываются `push / pop / replace`).
-- **`GameScene`** — импортируется `MenuScene` для старта партии и, транзитивно, `PauseScene` живёт поверх её кадра.
-- **`HighScoreStorage`** — `load()` в `MenuScene` и `GameOverScene`; `trySubmit(score, name)` в `GameOverScene`.
-- **`InputSystem`** — читаются `wasPressed(Confirm)`, `wasPressed(Pause)`, а в `GameOverScene` — ещё `RotateLeft`, `RotateRight`, `Thrust`, `Fire`. Методы `isDown` не используются: вся навигация UI дискретна.
-- **`renderer`** — `clearScreen`, `drawText` (заголовки, подсказки, строки таблицы), `drawPolyline` при необходимости нарисовать рамку клетки для ввода буквы.
-- **`config`** — `CANVAS.WIDTH` / `CANVAS.HEIGHT` для центрирования текста, `TOP_N` для количества строк таблицы, `NAME_LENGTH = 3` для размера редактора имени.
+- **`scene-manager`** — the `Scene` interface (implemented by all three classes) and the `SceneManager` class (calling `push / pop / replace`).
+- **`GameScene`** — imported by `MenuScene` to start a session; transitively, `PauseScene` lives above its frame.
+- **`HighScoreStorage`** — `load()` in `MenuScene` and `GameOverScene`; `trySubmit(score, name)` in `GameOverScene`.
+- **`InputSystem`** — reads `wasPressed(Confirm)`, `wasPressed(Pause)`, and in `GameOverScene` also `RotateLeft`, `RotateRight`, `Thrust`, `Fire`. `isDown` methods are not used: all UI navigation is discrete.
+- **`renderer`** — `clearScreen`, `drawText` (titles, hints, table rows), `drawPolyline` if needed to draw a letter-entry cell border.
+- **`config`** — `CANVAS.WIDTH` / `CANVAS.HEIGHT` for text centering, `TOP_N` for the number of table rows, `NAME_LENGTH = 3` for the name editor size.
 
-Сцены **не** зависят от `GameLoop`, `CollisionSystem`, `WaveManager`, `Scoring`, `Ship` и прочих игровых сущностей.
+The scenes are **not** dependent on `GameLoop`, `CollisionSystem`, `WaveManager`, `Scoring`, `Ship`, or other game entities.
 
-## Обработка ошибок
+## Error Handling
 
-- **Пустая таблица рекордов в `MenuScene`.** `highScores.load()` вернул `[]`. `draw` вместо строк таблицы показывает заглушку «NO SCORES YET» или просто пустое место ниже подсказки — без ошибок.
-- **`trySubmit` бросил (не может: модуль глотает исключения).** По контракту `HighScoreStorage` метод не кидает и при `localStorage`-сбоях возвращает `{ accepted: false, position: null }`. Сцена в этом случае идёт в подрежим `'scores'` и ведёт себя как при обычном непопадании. Игрок не видит ошибки — graceful degradation согласно архитектуре.
-- **Повторный сабмит с правильным именем перезаписывает, но не идеально.** Схема «сабмит при `enter` с `AAA` → при `Confirm` второй сабмит с настоящим именем» опирается на стабильную сортировку: новая запись кладётся ниже первой при равенстве счёта, и затем старую `'AAA'` удалить атомарно нельзя — таблица может содержать обе. Это осознанно вынесено в «Открытые вопросы»; для MVP выбрано простое решение.
-- **Нажатие `Pause` в `MenuScene` / `GameOverScene`.** Игнорируется (no-op). Вне игры паузить нечего; лишний `pop` из меню привёл бы к пустому стеку.
-- **Двойное нажатие `Confirm` во время перехода между сценами.** Защиты нет на уровне модуля: `SceneManager.replace` атомарен, а `wasPressed` возвращается к `false` после `clearFrame` того же кадра, в котором случился переход. Если `replace` произошёл в середине `update`, сцена уже сменилась, и второй вызов не попадёт в эту же сцену.
-- **Невалидные символы в `finalName`.** Конструктор и мутации гарантируют, что `finalName` всегда — строка из трёх символов `A..Z`; шагая `+1` / `-1` по модулю 26, нельзя выйти за пределы диапазона. Дополнительной валидации перед сабмитом не требуется — `HighScoreStorage` всё равно нормализует.
-- **Потеря фокуса окна во время паузы.** `InputSystem` на `blur` сбрасывает зажатые клавиши (см. документ input-system), `PauseScene` не использует `isDown`, только `wasPressed` — то есть сценарий безопасен.
+- **Empty score table in `MenuScene`.** `highScores.load()` returned `[]`. `draw` shows a "NO SCORES YET" placeholder or simply empty space below the hint — no errors.
+- **`trySubmit` threw (it cannot: the module swallows exceptions).** Per the `HighScoreStorage` contract, the method does not throw and returns `{ accepted: false, position: null }` on `localStorage` failure. The scene then goes into `'scores'` sub-mode and behaves as if the score simply didn't rank. The player sees no error — graceful degradation per the architecture.
+- **The second submit with the correct name may not cleanly replace the first.** The "submit on `enter` with `'AAA'` → second submit with the real name on `Confirm`" scheme relies on stable sorting: the new entry is placed below the first on equal scores, and the old `'AAA'` entry cannot be atomically removed — the table may contain both. This is consciously deferred to Open Questions; a simple solution was chosen for MVP.
+- **Pressing `Pause` in `MenuScene` / `GameOverScene`.** Ignored (no-op). There is nothing to pause outside the game; a spurious `pop` from the menu would leave an empty stack.
+- **Double press of `Confirm` during a scene transition.** No protection at the module level: `SceneManager.replace` is atomic, and `wasPressed` resets to `false` after `clearFrame` in the same frame the transition occurred. If `replace` happened mid-`update`, the scene has already changed and the second call will not reach the same scene.
+- **Invalid characters in `finalName`.** The constructor and mutations guarantee that `finalName` is always a 3-character string `A..Z`; stepping `+1` / `-1` modulo 26 cannot exceed the range. No additional validation before submission is needed — `HighScoreStorage` normalises anyway.
+- **Focus loss during pause.** `InputSystem` clears held keys on `blur` (see input-system docs), `PauseScene` uses only `wasPressed`, not `isDown` — the scenario is safe.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript + ES-классы.** Три независимых класса, реализующих общий интерфейс `Scene`. Никакого общего базового класса: код сцен слишком разный, общий предок не даёт выигрыша и только усложняет чтение.
-- **Никаких сторонних UI-библиотек.** Сцены — это голый Canvas + текст; React/Vue/прочие фреймворки здесь бессмысленны.
-- **Конструкторный DI через объект `deps`.** Единообразно с `GameScene`: все зависимости приходят снаружи, сцены удобно пересоздавать.
-- **Без таймеров (`setTimeout/setInterval`).** Всё, что надо тикать, тикало бы через `update(dt)`; в этих сценах статики хватает, и никакой анимации не предусмотрено.
-- **`renderer` как единственная точка рисования.** Сцены не трогают `ctx.font` / `ctx.strokeStyle` напрямую за исключением одного места в `PauseScene` (`fillRect` с `rgba(0,0,0,0.5)` для полупрозрачного оверлея — это настолько специфичная операция, что делать для неё отдельный хелпер-утилиту избыточно).
+- **TypeScript + ES classes.** Three independent classes implementing a common `Scene` interface. No common base class: the scene code is too different; a common ancestor gives no benefit and only complicates reading.
+- **No third-party UI libraries.** Scenes are raw Canvas + text; React/Vue/other frameworks are pointless here.
+- **Constructor DI via a `deps` object.** Uniform with `GameScene`: all dependencies come from outside, scenes are easy to recreate.
+- **No timers (`setTimeout/setInterval`).** Anything that needs to tick would tick via `update(dt)`; in these scenes static content is sufficient, and no animation is planned.
+- **`renderer` as the single drawing point.** Scenes do not touch `ctx.font` / `ctx.strokeStyle` directly — except for one place in `PauseScene` (`fillRect` with `rgba(0,0,0,0.5)` for the semi-transparent overlay — this is specific enough that a dedicated helper utility would be excessive).
 
-## Конфигурация
+## Configuration
 
-Переменных окружения у модуля нет. Значения, которые сцены читают из `config`:
+The module has no environment variables. Values the scenes read from `config`:
 
-| Имя | Назначение | Значение по умолчанию |
+| Name | Purpose | Default |
 |---|---|---|
-| `CANVAS.WIDTH` / `CANVAS.HEIGHT` | размер поля для центрирования текста и оверлея. | `800 / 600` |
-| `TOP_N` | число строк таблицы рекордов. | `10` |
-| `NAME_LENGTH` | длина редактируемого имени в `GameOverScene`. | `3` |
-| `PAUSE_OVERLAY_ALPHA` | прозрачность затемнения в `PauseScene` (`rgba(0,0,0, α)`). | `0.5` |
-| `MENU_TITLE_SIZE` / `MENU_HINT_SIZE` / `MENU_TABLE_SIZE` | кегли шрифтов в меню. | `48 / 20 / 16` |
-| `GAMEOVER_TITLE_SIZE` | кегль надписи «GAME OVER». | `48` |
+| `CANVAS.WIDTH` / `CANVAS.HEIGHT` | field size for text centering and the overlay. | `800 / 600` |
+| `TOP_N` | number of rows in the score table. | `10` |
+| `NAME_LENGTH` | length of the editable name in `GameOverScene`. | `3` |
+| `PAUSE_OVERLAY_ALPHA` | overlay opacity in `PauseScene` (`rgba(0,0,0, α)`). | `0.5` |
+| `MENU_TITLE_SIZE` / `MENU_HINT_SIZE` / `MENU_TABLE_SIZE` | font sizes in the menu. | `48 / 20 / 16` |
+| `GAMEOVER_TITLE_SIZE` | font size of the "GAME OVER" label. | `48` |
 
-Секретов нет.
+No secrets.
 
-## Открытые вопросы
+## Open Questions
 
-- **Двойной сабмит в `GameOverScene`.** Сейчас предлагается сабмитить в `enter()` с `'AAA'`, затем повторно при `Confirm` с введённым именем. Это может оставить обе записи в таблице (и старая `'AAA'`, и новая с правильным именем при одном и том же счёте). Альтернатива: проверять попадание в топ вручную (`const scores = highScores.load(); if (score > scores[TOP_N-1]?.score ?? 0) ...`) без предварительной записи, сабмитить ровно один раз при `Confirm`. Решение переносится на этап реализации.
-- **Разрешение работы `Pause` в `MenuScene`/`GameOverScene`.** Сейчас — no-op; возможно, имеет смысл биндить `Escape` как «выход в меню» из `GameOverScene`, чтобы можно было уйти, не дожидаясь нажатия `Confirm`. Для MVP не требуется.
-- **Использование `NameChar` для ввода имени.** `InputSystem` уже поддерживает прямой ввод буквы с клавиатуры через `NameChar` + `getPressedChar`. Сейчас по заданию мы сознательно делаем аркадный ввод (стрелки для выбора позиции, Thrust/Fire для листания букв) — это атмосфернее, но менее удобно. Если появится UX-фидбек, стоит разрешить оба способа одновременно: стрелки / Thrust / Fire **или** прямой ввод буквы.
-- **Заморозка НЛО и таймеров `GameScene` на паузе.** Формально это ответственность `GameScene` и `SceneManager` (который просто не вызывает у неё `update`), но если когда-нибудь добавим фоновую музыку или анимацию HUD, понадобится хук «на паузу» (см. открытый вопрос в `scene-manager.md`).
-- **Анимация подсветки «PRESS ENTER».** Сейчас текст статичен; мигание добавит «ретро-ощущение», но требует хранения фазы-таймера и вызова `update(dt)`. Откладываем до полировки.
-- **Подсветка свежей записи в таблице рекордов.** Удобная UX-фича (другой цвет или `>` перед строкой), требует цветовой вариации в `drawText`. Пока в scope только как опция, не обязательна для MVP.
-- **Возврат в меню по таймауту.** Если игрок ушёл от компьютера на экране `GameOverScene`, разумно автоматически вернуться в меню через N секунд. Не критично для MVP.
+- **Double submit in `GameOverScene`.** Currently proposed: submit in `enter()` with `'AAA'`, then again on `Confirm` with the entered name. This may leave both entries in the table (the old `'AAA'` and the new with the correct name if they have the same score). Alternative: manually check for top-10 eligibility (`const scores = highScores.load(); if (score > scores[TOP_N-1]?.score ?? 0) ...`) without the pre-write, and submit exactly once on `Confirm`. Decision deferred to the implementation stage.
+- **Allow `Pause` in `MenuScene`/`GameOverScene`.** Currently — no-op; possibly binding `Escape` as "back to menu" from `GameOverScene` makes sense so the player can leave without pressing `Confirm`. Not required for MVP.
+- **Using `NameChar` for name entry.** `InputSystem` already supports direct letter entry via `NameChar` + `getPressedChar`. The current arcade-style input (arrows for cursor position, Thrust/Fire for letter cycling) is more atmospheric but less convenient. If UX feedback arrives, both modes should be supported simultaneously: arrows / Thrust / Fire **or** direct letter input.
+- **Freezing UFO and `GameScene` timers during pause.** Formally this is `GameScene`'s and `SceneManager`'s responsibility (which simply doesn't call `update` on it), but if background music or HUD animation is ever added, a "on pause" hook will be needed (see the open question in `scene-manager.md`).
+- **"PRESS ENTER" blinking animation.** Currently text is static; blinking would add a "retro feel" but requires storing a phase timer and calling `update(dt)`. Deferred to polish.
+- **Highlighting the fresh entry in the score table.** A useful UX feature (different colour or `>` prefix), requiring colour variation in `drawText`. Currently in scope only as an option, not mandatory for MVP.
+- **Auto-return to menu on timeout.** If the player walks away from the computer on the `GameOverScene` screen, automatically returning to the menu after N seconds is reasonable. Not critical for MVP.

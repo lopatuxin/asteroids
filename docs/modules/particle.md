@@ -1,133 +1,133 @@
-# Модуль `particle`
+# Module `particle`
 
-## Назначение
+## Purpose
 
-Модуль определяет класс `Particle extends Entity` — короткоживущую частицу, используемую исключительно для визуального эффекта взрыва (разрушение астероида, уничтожение корабля или НЛО). Каждая частица — это точка/короткая линия с собственным вектором скорости и таймером жизни, затухающая (по alpha) по мере приближения `lifetime` к нулю. Без этого модуля при взрывах не было бы визуального фидбэка — объекты просто молча исчезали бы, что субъективно ощущается как баг.
+The module defines the `Particle extends Entity` class — a short-lived particle used exclusively for the visual explosion effect (asteroid destruction, ship destruction, or UFO destruction). Each particle is a point or short line with its own velocity vector and lifetime timer, fading out (by alpha) as `lifetime` approaches zero. Without this module, explosions would have no visual feedback — objects would simply vanish silently, which feels like a bug.
 
-Помимо самого класса, модуль экспортирует фабрику `spawnExplosion(...)`, которая единым вызовом собирает пачку частиц с разбросом направлений и скоростей — типовой способ породить взрыв в одном месте кода.
+In addition to the class itself, the module exports the `spawnExplosion(...)` factory, which assembles a batch of particles with scattered directions and speeds in a single call — the typical way to produce an explosion at one point in the code.
 
-## Ответственности
+## Responsibilities
 
-- Объявление класса `Particle extends Entity` с полями `lifetime` и `maxLifetime`.
-- Реализация `update(dt)`: стандартная интеграция движения через `integrate(dt)` (с wrap-around по краям канваса, как у всех сущностей) и уменьшение `lifetime`; при `lifetime <= 0` — `alive = false`.
-- Реализация `draw(ctx)`: отрисовка точки или короткой линии белым цветом с `globalAlpha = lifetime / maxLifetime` для эффекта затухания.
-- Экспорт фабрики `spawnExplosion(position, count, speedRange, lifetimeRange): Particle[]` — порождает пачку частиц, равномерно распределённых по направлениям, со случайными скоростями и временами жизни в заданных диапазонах.
-- Формальное удовлетворение контракта `Entity`: `radius = 1` задаётся в конструкторе, но только для соответствия сигнатуре базового класса.
+- Declaring the `Particle extends Entity` class with fields `lifetime` and `maxLifetime`.
+- Implementing `update(dt)`: standard motion integration via `integrate(dt)` (with canvas-edge wrap-around like all entities) and decrementing `lifetime`; when `lifetime <= 0` — `alive = false`.
+- Implementing `draw(ctx)`: drawing a point or short white line with `globalAlpha = lifetime / maxLifetime` for the fade effect.
+- Exporting the factory `spawnExplosion(position, count, speedRange, lifetimeRange): Particle[]` — generates a batch of particles uniformly distributed in direction, with random speeds and lifetimes in the given ranges.
+- Formally satisfying the `Entity` contract: `radius = 1` is set in the constructor but only to satisfy the base class signature.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- **Не участвует в коллизиях.** `CollisionSystem` частицы не проверяет, список `world.particles` в её парах не фигурирует. `radius = 1` — формальная заглушка, не смысловая величина.
-- **Не владеет списком частиц.** Пачки создаются фабрикой `spawnExplosion` и складываются в `world.particles` вызывающим кодом (`World`); чистка «мёртвых» частиц — общий механизм `World` (фильтр по `alive`).
-- **Не знает, из-за чего произошёл взрыв.** Астероид, корабль, НЛО — ей всё равно; вызывающий сам решает, сколько и каких частиц спавнить.
-- **Не отвечает за звук взрыва.** Звук (если появится) живёт в отдельной подсистеме, `Particle` чисто визуальна.
-- **Не расщепляется и не эмитит дочерние частицы.** Это простая «одноразовая» сущность.
-- **Не хранит цвет как поле.** Цвет фиксирован — белый, в духе векторной графики оригинала; если в будущем понадобятся разноцветные искры, поле добавим и обновим этот раздел.
+- **Does not participate in collisions.** `CollisionSystem` does not check particles; `world.particles` does not appear in its pairs. `radius = 1` — a formal placeholder, not a meaningful value.
+- **Does not own the particle list.** Batches are created by the `spawnExplosion` factory and placed into `world.particles` by the calling code (`World`); cleaning up "dead" particles is the common `World` mechanism (filter by `alive`).
+- **Does not know what caused the explosion.** Asteroid, ship, UFO — it doesn't matter; the caller decides how many and what kind of particles to spawn.
+- **Is not responsible for the explosion sound.** Sound (if it ever appears) lives in a separate subsystem; `Particle` is purely visual.
+- **Does not split or emit child particles.** It is a simple "one-shot" entity.
+- **Does not store colour as a field.** Colour is fixed — white, in the spirit of the original's vector graphics; if coloured sparks are needed in the future, the field will be added and this section updated.
 
-## Публичный интерфейс
+## Public Interface
 
-Экспорты модуля:
+Module exports:
 
-- `class Particle extends Entity` — короткоживущая частица.
-- `spawnExplosion(position: Vec2, count: number, speedRange: [number, number], lifetimeRange: [number, number]): Particle[]` — фабрика пачки частиц взрыва.
+- `class Particle extends Entity` — short-lived particle.
+- `spawnExplosion(position: Vec2, count: number, speedRange: [number, number], lifetimeRange: [number, number]): Particle[]` — factory for a batch of explosion particles.
 
-Поля экземпляра `Particle` (поверх унаследованных от `Entity`):
+`Particle` instance fields (beyond those inherited from `Entity`):
 
-- `lifetime: number` — оставшееся время жизни в секундах; уменьшается каждый тик.
-- `maxLifetime: number` — исходное значение `lifetime`, сохранённое на момент создания; нужно для расчёта `alpha = lifetime / maxLifetime`.
+- `lifetime: number` — remaining lifetime in seconds; decremented each tick.
+- `maxLifetime: number` — the original `lifetime` value saved at creation time; needed to compute `alpha = lifetime / maxLifetime`.
 
-Конструктор:
+Constructor:
 
-- `constructor(position: Vec2, velocity: Vec2, lifetime: number)` — принимает стартовую позицию, вектор скорости и время жизни. Внутри вызывает `super(position, velocity, 1)` (радиус — формальная единица), инициализирует `this.lifetime = lifetime` и `this.maxLifetime = lifetime`.
+- `constructor(position: Vec2, velocity: Vec2, lifetime: number)` — accepts the starting position, velocity vector, and lifetime. Internally calls `super(position, velocity, 1)` (radius is a formal unit), initialises `this.lifetime = lifetime` and `this.maxLifetime = lifetime`.
 
-Методы:
+Methods:
 
-- `update(dt: number): void` — уменьшает `lifetime` на `dt`, при `lifetime <= 0` выставляет `alive = false`, затем вызывает `this.integrate(dt)` для движения + wrap-around.
-- `draw(ctx: CanvasRenderingContext2D): void` — сохраняет состояние контекста (`save`), выставляет `globalAlpha = lifetime / maxLifetime` и `strokeStyle/fillStyle = 'white'`, рисует точку (`fillRect(x-0.5, y-0.5, 1, 1)`) или короткую линию длиной 2px по направлению скорости, восстанавливает контекст (`restore`).
+- `update(dt: number): void` — decrements `lifetime` by `dt`, sets `alive = false` when `lifetime <= 0`, then calls `this.integrate(dt)` for movement + wrap-around.
+- `draw(ctx: CanvasRenderingContext2D): void` — saves context state (`save`), sets `globalAlpha = lifetime / maxLifetime` and `strokeStyle/fillStyle = 'white'`, draws a point (`fillRect(x-0.5, y-0.5, 1, 1)`) or a short 2 px line along the velocity direction, restores context (`restore`).
 
-Фабрика:
+Factory:
 
-- `spawnExplosion(position, count, speedRange, lifetimeRange)` — возвращает массив из `count` частиц. Для каждой: случайный угол в `[0, 2π)`, случайная скорость `randomRange(speedRange[0], speedRange[1])`, вектор скорости = `rotate({x: 1, y: 0}, angle)` масштабированный на эту скорость (либо `fromAngle(angle, speed)`), случайное время жизни `randomRange(lifetimeRange[0], lifetimeRange[1])`, позиция — копия переданного центра взрыва.
+- `spawnExplosion(position, count, speedRange, lifetimeRange)` — returns an array of `count` particles. For each: a random angle in `[0, 2π)`, a random speed `randomRange(speedRange[0], speedRange[1])`, velocity vector = `rotate({x: 1, y: 0}, angle)` scaled by that speed (or `fromAngle(angle, speed)`), a random lifetime `randomRange(lifetimeRange[0], lifetimeRange[1])`, position — a copy of the given explosion centre.
 
-## Модель данных
+## Data Model
 
-Модуль описывает форму одного объекта в памяти; таблиц и коллекций в смысле БД не имеет.
+The module describes the shape of one object in memory; it has no tables or collections in the DB sense.
 
-**Поля `Particle` (вместе с унаследованными):**
+**`Particle` fields (including inherited):**
 
-| Поле | Тип | Источник | Назначение |
+| Field | Type | Source | Purpose |
 |---|---|---|---|
-| `position` | `Vec2` | `Entity` / конструктор | текущая позиция частицы на канвасе |
-| `velocity` | `Vec2` | `Entity` / конструктор | скорость движения, px/s |
-| `radius` | `number` | `Entity` / конструктор (`= 1`) | формальная заглушка для контракта `Entity`, не используется |
-| `alive` | `boolean` | `Entity` (default `true`) | `false` → `World` удалит частицу на зачистке |
-| `lifetime` | `number` | конструктор | оставшееся время жизни, с |
-| `maxLifetime` | `number` | конструктор (копия `lifetime`) | для расчёта `alpha = lifetime / maxLifetime` |
+| `position` | `Vec2` | `Entity` / constructor | current particle position on the canvas |
+| `velocity` | `Vec2` | `Entity` / constructor | movement speed, px/s |
+| `radius` | `number` | `Entity` / constructor (`= 1`) | formal placeholder for the `Entity` contract, not used |
+| `alive` | `boolean` | `Entity` (default `true`) | `false` → `World` removes the particle at cleanup |
+| `lifetime` | `number` | constructor | remaining lifetime, s |
+| `maxLifetime` | `number` | constructor (copy of `lifetime`) | for computing `alpha = lifetime / maxLifetime` |
 
-**Связи и индексы.** Нет. `Particle` — «листовой» объект, не ссылается ни на какие другие сущности. Живёт в плоском массиве `World.particles: Particle[]`.
+**Relations and indexes.** None. `Particle` is a "leaf" object, references no other entities. Lives in the flat array `World.particles: Particle[]`.
 
-**Почему отдельное поле `maxLifetime`.** Альтернатива — считать `alpha` от фиксированной константы времени жизни из `config`. Но фабрика `spawnExplosion` генерирует частицы со случайным `lifetime` в диапазоне, поэтому у каждой частицы своё исходное значение, и хранить его в экземпляре — самый простой и безошибочный путь.
+**Why a separate `maxLifetime` field.** Alternative — compute `alpha` from a fixed config lifetime constant. But the `spawnExplosion` factory generates particles with a random `lifetime` in a range, so each particle has its own initial value, and storing it in the instance is the simplest and most error-free approach.
 
-## Ключевые потоки
+## Key Flows
 
-**Тик жизни частицы.** `World.update(dt)` перебирает `particles` и для каждой вызывает `particle.update(dt)`. Внутри: `this.lifetime -= dt`; если `this.lifetime <= 0`, то `this.alive = false` (и дальше метод может сразу вернуться, но это не обязательно — лишний `integrate` безобиден); иначе вызывается `this.integrate(dt)`, который сдвигает `position` на `velocity * dt` и wrap-ит координаты через `wrapVec2`. В конце тика `World` фильтрует мёртвых: `this.particles = this.particles.filter(p => p.alive)`.
+**Particle lifecycle tick.** `World.update(dt)` iterates `particles` and calls `particle.update(dt)` for each. Inside: `this.lifetime -= dt`; if `this.lifetime <= 0`, then `this.alive = false` (the method may return early, but an extra `integrate` is harmless); otherwise `this.integrate(dt)` is called, which shifts `position` by `velocity * dt` and wraps coordinates via `wrapVec2`. At end-of-tick `World` filters dead ones: `this.particles = this.particles.filter(p => p.alive)`.
 
-**Отрисовка.** `GameScene.draw(ctx)` перебирает `particles` и для каждой вызывает `particle.draw(ctx)`. Частица сохраняет контекст, выставляет `globalAlpha = lifetime / maxLifetime` (плавно уходит от 1 к 0), рисует точку/короткую линию белым, восстанавливает контекст. В итоге на экране — россыпь искр, постепенно гаснущих там, где только что был взрыв.
+**Drawing.** `GameScene.draw(ctx)` iterates `particles` and calls `particle.draw(ctx)` for each. The particle saves context, sets `globalAlpha = lifetime / maxLifetime` (smoothly transitions from 1 to 0), draws a point/short line in white, restores context. Result — on-screen, a spray of sparks gradually fading where an explosion just happened.
 
-**Создание взрыва через `spawnExplosion`.** `World` при разрешении коллизий получает событие «астероид уничтожен»; вызывает `const fx = spawnExplosion(asteroid.position, 12, [60, 180], [0.4, 0.9])` и дописывает результат: `this.particles.push(...fx)`. Фабрика внутри `count` раз генерирует случайный угол, собирает вектор скорости нужного модуля, случайный `lifetime` и создаёт `new Particle(position, velocity, lifetime)`. Возвращает массив.
+**Creating an explosion via `spawnExplosion`.** `World`, upon resolving a collision "asteroid destroyed", calls `const fx = spawnExplosion(asteroid.position, 12, [60, 180], [0.4, 0.9])` and appends the result: `this.particles.push(...fx)`. The factory internally generates a random angle `count` times, assembles a velocity vector of the required magnitude, a random `lifetime`, and creates `new Particle(position, velocity, lifetime)`. Returns the array.
 
-**Wrap-around для улетевших частиц.** Частица наследует общий `integrate(dt)` из `Entity` и, следовательно, wrap-ится по краям канваса — так же, как астероиды и пули. Это сознательный выбор простоты: альтернатива «частица улетает за край и сразу дохнет» потребовала бы отдельного кода проверки границ и, главное, отдельного пути без wrap в `integrate`. При коротком `lifetime` (доли секунды) визуальная разница между двумя вариантами пренебрежима — большинство частиц умирает своей смертью до того, как доползёт до края.
+**Wrap-around for escaping particles.** A particle inherits the common `integrate(dt)` from `Entity` and therefore wraps at canvas edges — just like asteroids and bullets. This is a deliberate simplicity choice: the alternative "particle flies off-screen and immediately dies" would require separate boundary-check code and, importantly, a separate no-wrap path in `integrate`. With a short `lifetime` (fractions of a second), the visual difference between the two variants is negligible — most particles die naturally before reaching the edge.
 
-## Зависимости
+## Dependencies
 
-- **`entity`** — базовый класс `Entity` с общим состоянием и helper-ом `integrate(dt)`.
-- **`vec2-math`** — тип `Vec2`, фабрики и операции: `fromAngle` / `rotate`, `scale`, `randomRange`. Используется и в `update` (через наследованный `integrate`), и в `spawnExplosion` для генерации случайных векторов скорости.
-- **`config`** — опционально, только если будет выделена группа `PARTICLE` с константами по умолчанию (см. «Открытые вопросы»). На старте модуль не зависит от `config` напрямую: все параметры (`count`, `speedRange`, `lifetimeRange`) передаются в `spawnExplosion` вызывающим.
-- **Стандартный DOM (`CanvasRenderingContext2D`)** — только как тип параметра `draw(ctx)`.
+- **`entity`** — base class `Entity` with common state and the `integrate(dt)` helper.
+- **`vec2-math`** — type `Vec2`, factories and operations: `fromAngle` / `rotate`, `scale`, `randomRange`. Used both in `update` (via the inherited `integrate`) and in `spawnExplosion` for generating random velocity vectors.
+- **`config`** — optional, only if a `PARTICLE` group with default constants is introduced (see Open Questions). Initially the module does not depend on `config` directly: all parameters (`count`, `speedRange`, `lifetimeRange`) are passed to `spawnExplosion` by the caller.
+- **Standard DOM (`CanvasRenderingContext2D`)** — only as the type parameter for `draw(ctx)`.
 
-Обратные зависимости: `World` импортирует `Particle` (как тип массива `particles`) и `spawnExplosion` (для порождения взрывов при разрешении коллизий).
+Reverse dependencies: `World` imports `Particle` (as the array type `particles`) and `spawnExplosion` (to produce explosions when resolving collisions).
 
-## Обработка ошибок
+## Error Handling
 
-- **Некорректный `lifetime` в конструкторе (`<=0`, `NaN`).** Рантайм-проверок нет. `lifetime <= 0` приведёт к тому, что частица умрёт на первом же тике, не успев нарисоваться — это безобидный вырожденный случай. `NaN` распространится в `alpha` и даст невидимую частицу до её смерти на следующем кадре; это баг вызывающего, ловится визуально в dev-сборке.
-- **`maxLifetime = 0` → деление на ноль при расчёте alpha.** Возможно только при `lifetime = 0` на входе (см. выше). Защита — просто не передавать нулевое время жизни; в `spawnExplosion` диапазон `lifetimeRange` контролирует вызывающий.
-- **Частица улетает за экран.** Не ошибка — срабатывает общий wrap-around из `integrate`. Частица продолжит движение в торе до естественной смерти по `lifetime`.
-- **Перегрузка большим числом частиц.** Если на взрыв спавнится очень много частиц (сотни-тысячи), просадка FPS возможна из-за O(n) `draw`. Контракт — вызывающий задаёт разумный `count` (порядок десятков на взрыв). Рантайм-лимитера в модуле нет; при необходимости его добавит `World` (например, потолок на `world.particles.length`).
-- **Исключение в `update`/`draw`.** Не ловится модулем, пробрасывается в верхнеуровневый try/catch игрового цикла.
-- **Downstream failure, partial success.** Неприменимо: модуль синхронный, без I/O и без внешних вызовов.
+- **Invalid `lifetime` in constructor (`<= 0`, `NaN`).** No runtime checks. `lifetime <= 0` will cause the particle to die on the very first tick without being drawn — a harmless degenerate case. `NaN` will propagate into `alpha` and produce an invisible particle until its death on the next frame; this is a caller bug, caught visually in a dev build.
+- **`maxLifetime = 0` → division by zero when computing alpha.** Only possible when `lifetime = 0` on input (see above). Protection — simply don't pass zero lifetime; `spawnExplosion` controls the `lifetimeRange`, and the caller controls the range.
+- **Particle escapes the screen.** Not an error — the common wrap-around from `integrate` fires. The particle continues moving on the torus until its natural death via `lifetime`.
+- **Overload from a large number of particles.** If very many particles are spawned per explosion (hundreds or thousands), an FPS drop is possible due to O(n) `draw`. The contract is that the caller passes a reasonable `count` (on the order of tens per explosion). There is no runtime limiter in the module; if needed, `World` can add one (e.g. a ceiling on `world.particles.length`).
+- **Exception in `update`/`draw`.** Not caught by the module; propagates to the game loop's top-level try/catch.
+- **Downstream failure, partial success.** Not applicable: synchronous module with no I/O or external calls.
 
-Наружу ошибок модуль не выбрасывает.
+The module does not throw errors externally.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript (ES2022 target), классы с `extends`.** Язык задан архитектурой; наследование от `Entity` — единственное структурное требование.
-- **Без внешних библиотек.** Модуль — несколько десятков строк поверх `Entity` и `vec2-math`; никаких particle-движков (`proton`, `tsparticles`) не нужно.
-- **Canvas 2D API** — `save/restore`, `globalAlpha`, `fillRect`/`moveTo+lineTo+stroke`. Ничего сверх того, что уже используется в других `draw`-методах.
-- **Без пула объектов.** Частицы создаются обычным `new` и отбрасываются через `alive = false`. Для десятков-сотен коротких взрывов за сессию давление на GC пренебрежимо мало; пул можно ввести позже, если профайлер покажет проблему.
-- **Без рантайм-валидации.** Контракты — на уровне типов TS.
+- **TypeScript (ES2022 target), classes with `extends`.** Language defined by architecture; inheritance from `Entity` is the only structural requirement.
+- **No external libraries.** The module is a few dozen lines on top of `Entity` and `vec2-math`; no particle engines (`proton`, `tsparticles`) are needed.
+- **Canvas 2D API** — `save/restore`, `globalAlpha`, `fillRect`/`moveTo+lineTo+stroke`. Nothing beyond what is already used in other `draw` methods.
+- **No object pooling.** Particles are created with regular `new` and discarded via `alive = false`. For tens to hundreds of short explosions per session, GC pressure is negligibly small; a pool can be introduced later if the profiler shows a problem.
+- **No runtime validation.** Contracts are at the TS type level.
 
-## Конфигурация
+## Configuration
 
-Внешней конфигурации модуль не имеет. Все численные параметры (количество частиц, диапазоны скоростей и времён жизни) передаются извне в `spawnExplosion` — вызывающий код (обычно `World` при разрешении коллизий) решает, как выглядит конкретный взрыв.
+The module has no external configuration. All numeric parameters (particle count, speed ranges, lifetime ranges) are passed externally to `spawnExplosion` — the calling code (usually `World` during collision resolution) decides how a specific explosion looks.
 
-Если и когда в `config.ts` будет выделена группа `PARTICLE` (см. соответствующий открытый вопрос в модуле `config`), предполагаемые поля:
+If and when a `PARTICLE` group is added to `config.ts` (see the corresponding open question in the `config` module), the anticipated fields:
 
-| Поле | Тип | Ориентировочно | Назначение |
+| Field | Type | Tentative | Purpose |
 |---|---|---|---|
-| `PARTICLE.COUNT_ASTEROID_LARGE` | number | `12` | число частиц при взрыве крупного астероида |
-| `PARTICLE.COUNT_ASTEROID_MEDIUM` | number | `8` | для среднего |
-| `PARTICLE.COUNT_ASTEROID_SMALL` | number | `5` | для мелкого |
-| `PARTICLE.COUNT_SHIP` | number | `20` | при гибели корабля |
-| `PARTICLE.COUNT_UFO` | number | `16` | при уничтожении НЛО |
-| `PARTICLE.SPEED_RANGE` | `[number, number]` | `[60, 180]` | диапазон модуля скорости, px/s |
-| `PARTICLE.LIFETIME_RANGE` | `[number, number]` | `[0.4, 0.9]` | диапазон времени жизни, с |
+| `PARTICLE.COUNT_ASTEROID_LARGE` | number | `12` | particle count for a large asteroid explosion |
+| `PARTICLE.COUNT_ASTEROID_MEDIUM` | number | `8` | for medium |
+| `PARTICLE.COUNT_ASTEROID_SMALL` | number | `5` | for small |
+| `PARTICLE.COUNT_SHIP` | number | `20` | on ship death |
+| `PARTICLE.COUNT_UFO` | number | `16` | on UFO destruction |
+| `PARTICLE.SPEED_RANGE` | `[number, number]` | `[60, 180]` | speed magnitude range, px/s |
+| `PARTICLE.LIFETIME_RANGE` | `[number, number]` | `[0.4, 0.9]` | lifetime range, s |
 
-До появления этой группы значения передаются в `spawnExplosion` магическими числами из `World` (либо локальными константами в `World`).
+Until that group exists, values are passed to `spawnExplosion` as magic numbers from `World` (or local constants in `World`).
 
-## Открытые вопросы
+## Open Questions
 
-- **Выделять ли группу `PARTICLE` в `config` или держать значения в `World`.** Второй вариант уменьшает связь модулей, но распыляет баланс; по духу `config` всё же стоит централизовать. Решение отложено до реализации первых взрывов — тогда станет видно, сколько наборов чисел реально нужно.
-- **Точка или короткая линия в `draw`.** Короткая линия по направлению скорости выглядит как «искра с хвостом» и ближе к классике; точка дешевле и проще. Выберем после первой визуальной сборки.
-- **Wrap или смерть на краю.** Принято решение использовать общий `integrate(dt)` из `Entity` с wrap — проще и консистентнее с остальными сущностями. При коротком `lifetime` разница практически неразличима. Если визуально не понравится — добавим параметр wrap/no-wrap в `integrate` (см. открытый вопрос в модуле `entity`).
-- **Нужен ли цвет как поле.** Сейчас цвет жёстко белый. Если возникнут «цветные» взрывы (например, красноватый для корабля игрока, зелёный для НЛО), поле `color: string` добавим в конструктор; фабрику расширим дополнительным параметром.
-- **Вводить ли потолок на количество одновременно живых частиц.** При экстремальных ситуациях (серия быстрых взрывов) теоретически можно просадить FPS. Пока не ограничиваем — вернёмся после первого стресс-теста.
-- **Участие в коллизиях.** Зафиксировано: не участвует. Если по геймплейной задумке частицы когда-то станут «пылью, задевающей корабль», это будет другой класс сущности, а не расширение `Particle`.
+- **Extract a `PARTICLE` group in `config` or keep values in `World`.** The second option reduces module coupling but scatters balance; the spirit of `config` is centralisation. Decision deferred until the first explosions are implemented — at that point it will be clear how many distinct number sets are actually needed.
+- **Point or short line in `draw`.** A short line along the velocity looks like "a spark with a tail" and is closer to the classic feel; a point is cheaper and simpler. Choice after the first visual build.
+- **Wrap or die at the edge.** Decided: use common `integrate(dt)` from `Entity` with wrap — simpler and consistent with other entities. With a short `lifetime` the difference is practically invisible. If it looks wrong visually — a wrap/no-wrap parameter can be added to `integrate` (see the open question in the `entity` module).
+- **Whether colour needs to be a field.** Currently hardcoded white. If "coloured" explosions appear (e.g. reddish for the player's ship, green for a UFO), a `color: string` field will be added to the constructor; the factory will be extended with an additional parameter.
+- **Whether to impose a ceiling on the number of simultaneously live particles.** In extreme situations (series of rapid explosions) FPS could theoretically drop. For now no limit — revisit after the first stress test.
+- **Participation in collisions.** Fixed: does not participate. If gameplay design ever makes particles "dust that grazes the ship", that will be a different entity class, not an extension of `Particle`.

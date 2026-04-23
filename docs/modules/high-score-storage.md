@@ -1,99 +1,99 @@
-# Модуль — HighScoreStorage
+# Module — HighScoreStorage
 
-## Назначение
+## Purpose
 
-`HighScoreStorage` — тонкий адаптер над `window.localStorage`, отвечающий за персистентную таблицу рекордов игры. Модуль инкапсулирует сериализацию, сортировку и обрезку списка до топ-10, а также является единственной точкой во всём приложении, которая читает и пишет в `localStorage`. Без него финальный счёт игрока некуда сохранить, а `GameOverScene` не сможет показать таблицу рекордов и определить, попал ли новый результат в топ.
+`HighScoreStorage` is a thin adapter over `window.localStorage` responsible for the persistent high-score table of the game. The module encapsulates serialisation, sorting, and trimming the list to a top-10, and is the single point in the entire application that reads from and writes to `localStorage`. Without it the player's final score has nowhere to be saved, and `GameOverScene` cannot display the high-score table or determine whether a new result ranked in the top.
 
-## Ответственности
+## Responsibilities
 
-- Чтение массива рекордов из `localStorage` по фиксированному ключу и десериализация JSON в типизированный список `ScoreEntry[]`.
-- Валидация формы загруженных данных: если JSON невалиден или не соответствует схеме, модуль возвращает пустой массив (поведение «как будто рекордов ещё нет»).
-- Нормализация имени игрока: приведение к ровно 3 символам, uppercase, замена неалфавитных символов на `'A'`.
-- Вставка новой записи, стабильная сортировка по убыванию счёта и обрезка до `TOP_N` (10).
-- Запись итогового массива обратно в `localStorage` с перехватом исключений (приватный режим, `QuotaExceededError`).
-- Сообщение вызывающей стороне, попала ли запись в топ и на какую позицию.
-- Полная очистка таблицы рекордов (`clear()`) — для отладки/сервисных сценариев.
+- Reading the score array from `localStorage` by a fixed key and deserialising JSON into a typed `ScoreEntry[]` list.
+- Validating the shape of loaded data: if the JSON is invalid or does not match the schema, the module returns an empty array (behaviour: "as if no records exist yet").
+- Normalising the player name: trim to exactly 3 characters, uppercase, replace non-alphabetic characters with `'A'`.
+- Inserting a new entry, stably sorting by descending score, and trimming to `TOP_N` (10).
+- Writing the final array back to `localStorage`, catching exceptions (private mode, `QuotaExceededError`).
+- Telling the caller whether the entry ranked in the top and at what position.
+- Fully clearing the score table (`clear()`) — for debugging/service scenarios.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не рендерит таблицу рекордов — это делает `GameOverScene`/`MenuScene` через Renderer.
-- Не собирает ввод имени игрока (эта обязанность — у сцены); модуль принимает уже введённую строку.
-- Не знает о текущей партии, жизнях, волнах, очках в процессе игры — только о финальной записи.
-- Не управляет версионированием/миграциями схем: при несовпадении формата данные считаются отсутствующими, без попытки конвертации.
-- Не взаимодействует ни с каким хранилищем, кроме `window.localStorage` (ни `IndexedDB`, ни `sessionStorage`, ни `cookies`).
-- Не шифрует и не подписывает данные — рекорды локальные, защита от подделки не требуется.
+- Does not render the score table — that is done by `GameOverScene`/`MenuScene` through Renderer.
+- Does not collect player name input (that is the scene's responsibility); the module receives the already-entered string.
+- Does not know about the current session, lives, waves, or in-game score — only about the final entry.
+- Does not manage versioning/schema migrations: on format mismatch, data is treated as absent, with no conversion attempt.
+- Does not interact with any storage other than `window.localStorage` (no `IndexedDB`, no `sessionStorage`, no cookies).
+- Does not encrypt or sign data — scores are local; protection against tampering is not required.
 
-## Публичный интерфейс
+## Public Interface
 
-Модуль экспортирует класс `HighScoreStorage` и тип `ScoreEntry`. Состояние класса — stateless-обёртка (либо вся логика в статических методах); ниже сигнатуры в виде методов инстанса.
+The module exports the `HighScoreStorage` class and the `ScoreEntry` type. Class state is a stateless wrapper (or all logic in static methods); below are instance method signatures.
 
-- `load(): ScoreEntry[]` — читает и возвращает массив рекордов, уже отсортированный по убыванию счёта. В случае любой ошибки чтения/парсинга возвращает `[]`.
-- `trySubmit(score: number, name: string): { accepted: boolean; position: number | null }` — пытается добавить новый результат. Возвращает `{ accepted: true, position: i }` (индекс 0..9) если запись попала в итоговый топ-10, иначе `{ accepted: false, position: null }`. При ошибке записи в `localStorage` возвращает `{ accepted: false, position: null }`.
-- `clear(): void` — удаляет ключ таблицы из `localStorage`. Ошибки подавляются.
+- `load(): ScoreEntry[]` — reads and returns the score array, already sorted by descending score. On any read/parse error returns `[]`.
+- `trySubmit(score: number, name: string): { accepted: boolean; position: number | null }` — attempts to add a new result. Returns `{ accepted: true, position: i }` (index 0..9) if the entry made it into the top-10, otherwise `{ accepted: false, position: null }`. On a `localStorage` write error returns `{ accepted: false, position: null }`.
+- `clear(): void` — removes the table key from `localStorage`. Errors are suppressed.
 
-Константа ключа — `STORAGE_KEY = 'asteroids.highscores'`, приватная для модуля.
+Key constant — `STORAGE_KEY = 'asteroids.highscores'`, private to the module.
 
-## Модель данных
+## Data Model
 
-Единственная сущность — `ScoreEntry`, хранящаяся в массиве под ключом `asteroids.highscores`.
+The single entity — `ScoreEntry`, stored in an array under the key `asteroids.highscores`.
 
-| Поле    | Тип      | Ограничения                                                              |
-|---------|----------|--------------------------------------------------------------------------|
-| `name`  | `string` | Ровно 3 символа, только A–Z (uppercase). Неалфавитные символы → `'A'`.   |
-| `score` | `number` | Целое неотрицательное, финальный счёт партии.                            |
-| `date`  | `string` | ISO-8601, момент сохранения записи (`new Date().toISOString()`).         |
+| Field | Type | Constraints |
+|---|---|---|
+| `name` | `string` | Exactly 3 characters, A–Z only (uppercase). Non-alphabetic → `'A'`. |
+| `score` | `number` | Non-negative integer, final session score. |
+| `date` | `string` | ISO-8601, moment of saving the entry (`new Date().toISOString()`). |
 
-В `localStorage` лежит сериализованный JSON-массив: `ScoreEntry[]`, длиной `0..10`, отсортированный по `score` по убыванию. Индексы не хранятся — позиция определяется порядком в массиве. Связей с другими сущностями нет. Индексы/вторичные ключи не нужны — массив короткий.
+In `localStorage`: a serialised JSON array: `ScoreEntry[]`, length `0..10`, sorted by `score` descending. Indexes are not stored — position is determined by order in the array. No relations to other entities. Indexes/secondary keys are not needed — the array is short.
 
-## Ключевые потоки
+## Key Flows
 
-**1. Загрузка таблицы рекордов при открытии `MenuScene` / `GameOverScene`.** Сцена вызывает `storage.load()` → модуль читает строку по ключу `asteroids.highscores` → если `null`, возвращает `[]` → иначе `JSON.parse` внутри `try/catch` → валидирует, что результат — массив объектов с полями `name:string(len=3)`, `score:number`, `date:string` → отфильтровывает битые записи; если хотя бы одна запись не проходит проверку формы, считается, что весь массив невалиден, и возвращается `[]` (простая стратегия «всё или ничего» — см. Обработка ошибок) → сортирует по `score` по убыванию (защита от внешней порчи порядка) → обрезает до 10 → возвращает.
+**1. Loading the score table when opening `MenuScene` / `GameOverScene`.** The scene calls `storage.load()` → the module reads the string at key `asteroids.highscores` → if `null`, returns `[]` → otherwise `JSON.parse` inside `try/catch` → validates that the result is an array of objects with fields `name:string(len=3)`, `score:number`, `date:string` → filters out corrupt entries; if at least one entry fails the format check, the entire array is treated as invalid and `[]` is returned (simple "all or nothing" strategy — see Error Handling) → sorts by `score` descending (protection against externally corrupted order) → trims to 10 → returns.
 
-**2. Сабмит результата после game over.** `GameOverScene` собирает имя (3 символа) и вызывает `storage.trySubmit(finalScore, name)` → модуль нормализует имя (uppercase, длина 3, неалфавитные → `'A'`) → вызывает `load()` → создаёт новую запись `{ name, score, date: new Date().toISOString() }` → конкатенирует с загруженным массивом → сортирует по убыванию счёта (стабильная сортировка: при равенстве очков старая запись остаётся выше новой) → обрезает до 10 → ищет новую запись в итоговом массиве по ссылочному равенству (ссылка на только что созданный объект уникальна) → если нашёл — `JSON.stringify` и `setItem` внутри `try/catch`, возвращает `{ accepted: true, position: index }`; если не нашёл (новая запись вытеснена за пределы топ-10) — ничего не пишет, возвращает `{ accepted: false, position: null }`; если `setItem` бросил исключение — возвращает `{ accepted: false, position: null }`.
+**2. Submitting a result after game over.** `GameOverScene` collects the name (3 characters) and calls `storage.trySubmit(finalScore, name)` → the module normalises the name (uppercase, length 3, non-alphabetic → `'A'`) → calls `load()` → creates a new entry `{ name, score, date: new Date().toISOString() }` → concatenates with the loaded array → sorts by descending score (stable sort: on equal scores the old entry stays above the new one) → trims to 10 → searches for the new entry in the final array by reference equality (reference to the just-created object is unique) → if found — `JSON.stringify` and `setItem` inside `try/catch`, returns `{ accepted: true, position: index }`; if not found (the new entry was pushed out of the top-10) — nothing is written, returns `{ accepted: false, position: null }`; if `setItem` threw — returns `{ accepted: false, position: null }`.
 
-**3. Сервисный сброс таблицы.** Где-то в dev-инструментах или по скрытой комбинации клавиш вызывается `storage.clear()` → модуль вызывает `localStorage.removeItem('asteroids.highscores')` внутри `try/catch` → после этого `load()` будет возвращать `[]`.
+**3. Service table reset.** Somewhere in dev tools or via a hidden key combination, `storage.clear()` is called → the module calls `localStorage.removeItem('asteroids.highscores')` inside `try/catch` → after this `load()` will return `[]`.
 
-## Зависимости
+## Dependencies
 
-- **Модуль `config`** — импортирует константы `TOP_N` (например, `10`) и `NAME_LENGTH` (например, `3`), чтобы не хардкодить числа внутри класса. Ключ `STORAGE_KEY` оставлен локально в модуле — это деталь реализации, не настройка баланса.
-- **`window.localStorage`** — браузерный API, единственная внешняя интеграция.
-- **`JSON` (built-in)** — сериализация/десериализация.
-- **`Date` (built-in)** — генерация ISO-строки для поля `date`.
+- **`config` module** — imports constants `TOP_N` (e.g. `10`) and `NAME_LENGTH` (e.g. `3`) to avoid hardcoding numbers inside the class. The `STORAGE_KEY` is kept local to the module — it is an implementation detail, not a balance setting.
+- **`window.localStorage`** — browser API, the only external integration.
+- **`JSON` (built-in)** — serialisation/deserialisation.
+- **`Date` (built-in)** — generating the ISO string for the `date` field.
 
-Модуль никем не зависим логически, кроме `GameOverScene` (сабмит) и `MenuScene`/`GameOverScene` (чтение). Не имеет состояния между вызовами.
+The module is logically depended on by nobody except `GameOverScene` (submit) and `MenuScene`/`GameOverScene` (read). It has no state between calls.
 
-## Обработка ошибок
+## Error Handling
 
-- **Невалидный JSON в хранилище** (`JSON.parse` бросает) — ловится `try/catch`, `load()` возвращает `[]`. Битое значение не затирается автоматически, чтобы не терять данные «молча» при потенциальных багах; ближайший успешный `trySubmit` перезапишет его корректным массивом.
-- **Схема не совпадает** (не массив; элемент без нужных полей; `name` не длины 3; `score` не число) — вся таблица считается отсутствующей, `load()` возвращает `[]`. Это простейшая стратегия «миграции»: старых форматов не поддерживаем, никогда не пытаемся конвертировать.
-- **`localStorage` недоступен** (приватный режим Safari, отключённое хранилище, `SecurityError` при доступе к `window.localStorage` из `iframe`) — обращение оборачивается в `try/catch`; `load()` → `[]`, `trySubmit()` → `{ accepted: false, position: null }`, `clear()` — no-op.
-- **`QuotaExceededError` при `setItem`** — ловится, `trySubmit()` возвращает `{ accepted: false, position: null }`. На практике для массива из 10 коротких записей квота переполниться не может, но обработка на месте для устойчивости.
-- **Невалидный ввод `score`** (`NaN`, `Infinity`, отрицательное число) — санитизация: `NaN`/`Infinity` → запись не принимается (`{ accepted: false, position: null }`); отрицательные значения формально допустимы, но на практике не случаются (Scoring не уходит в минус).
-- **Невалидный ввод `name`** — не ошибка, а сценарий нормализации: любая строка приводится к 3 символам uppercase с заменой не-A–Z на `'A'` (строка короче 3 символов добивается `'A'` справа, длиннее — обрезается).
-- **Ошибка логирования в dev-сборке** — внутренние ошибки пишутся через `console.warn('[highscores]', …)` только при `import.meta.env.DEV`; наружу исключения никогда не прокидываются. Игрок ошибки не видит — graceful degradation, как предписано архитектурой.
+- **Invalid JSON in storage** (`JSON.parse` throws) — caught by `try/catch`; `load()` returns `[]`. The corrupt value is not automatically overwritten to avoid silently losing data due to potential bugs; the next successful `trySubmit` will overwrite it with a correct array.
+- **Schema mismatch** (not an array; element missing required fields; `name` not length 3; `score` not a number) — the entire table is treated as absent; `load()` returns `[]`. This is the simplest "migration" strategy: no old formats are supported, no conversion is ever attempted.
+- **`localStorage` unavailable** (Safari private mode, disabled storage, `SecurityError` accessing `window.localStorage` from an `iframe`) — access is wrapped in `try/catch`; `load()` → `[]`, `trySubmit()` → `{ accepted: false, position: null }`, `clear()` — no-op.
+- **`QuotaExceededError` on `setItem`** — caught; `trySubmit()` returns `{ accepted: false, position: null }`. In practice, the quota cannot be exceeded by an array of 10 short entries, but the handler is there for robustness.
+- **Invalid `score` input** (`NaN`, `Infinity`, negative number) — sanitisation: `NaN`/`Infinity` → entry not accepted (`{ accepted: false, position: null }`); negative values are formally allowed but don't occur in practice (Scoring doesn't go negative).
+- **Invalid `name` input** — not an error, but a normalisation scenario: any string is trimmed to 3 uppercase characters with non-A–Z replaced by `'A'` (strings shorter than 3 are padded with `'A'` on the right, longer ones are truncated).
+- **Dev build logging error** — internal errors are written via `console.warn('[highscores]', …)` only when `import.meta.env.DEV`; exceptions are never propagated externally. The player sees no error — graceful degradation, as prescribed by the architecture.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript** — строгая типизация `ScoreEntry` и возвращаемых значений предотвращает ошибки на границе с `GameOverScene`.
-- **`window.localStorage`** — штатное браузерное API, синхронное, без зависимостей. Для топ-10 коротких записей его производительности и квоты с запасом хватает.
-- **Встроенные `JSON.stringify` / `JSON.parse`** — сериализация. Внешние библиотеки (zod, io-ts) избыточны: схема тривиальна, ручная валидация в 10 строк кода проще и не тянет bundle-зависимость.
-- **`Array.prototype.sort`** — стабильная сортировка в современных движках (ES2019+), соответствует целевым браузерам проекта.
-- **Никаких HTTP/транспортных библиотек, никаких мок-сторов** — модуль по определению локальный.
+- **TypeScript** — strict typing of `ScoreEntry` and return values prevents errors at the `GameOverScene` boundary.
+- **`window.localStorage`** — standard browser API, synchronous, no dependencies. For top-10 short entries its performance and quota are more than sufficient.
+- **Built-in `JSON.stringify` / `JSON.parse`** — serialisation. External libraries (zod, io-ts) are excessive: the schema is trivial; manual validation in 10 lines of code is simpler and adds no bundle dependency.
+- **`Array.prototype.sort`** — stable sorting in modern engines (ES2019+), matching the target browsers of the project.
+- **No HTTP/transport libraries, no mock stores** — the module is by definition local.
 
-## Конфигурация
+## Configuration
 
-| Имя              | Назначение                                         | Значение по умолчанию            |
-|------------------|----------------------------------------------------|----------------------------------|
-| `STORAGE_KEY`    | Ключ в `localStorage`, под которым лежит массив.   | `'asteroids.highscores'`         |
-| `TOP_N`          | Максимальная длина таблицы рекордов.               | `10` (из `config.ts`)            |
-| `NAME_LENGTH`    | Фиксированная длина имени игрока.                  | `3` (из `config.ts`)             |
-| `NAME_PAD_CHAR`  | Символ-заполнитель для невалидных позиций имени.   | `'A'`                            |
+| Name | Purpose | Default |
+|---|---|---|
+| `STORAGE_KEY` | Key in `localStorage` under which the array is stored. | `'asteroids.highscores'` |
+| `TOP_N` | Maximum length of the score table. | `10` (from `config.ts`) |
+| `NAME_LENGTH` | Fixed player name length. | `3` (from `config.ts`) |
+| `NAME_PAD_CHAR` | Pad character for invalid name positions. | `'A'` |
 
-Переменные окружения модулю не нужны — вся конфигурация компилируется в бандл через `config.ts`. Секретов нет.
+No environment variables — all configuration is compiled into the bundle via `config.ts`. No secrets.
 
-## Открытые вопросы
+## Open Questions
 
-- Нужна ли защита от конкурирующей записи из нескольких вкладок одного и того же origin (событие `storage`)? В MVP игнорируем: открытие двух вкладок — редкий сценарий, худшее последствие — одна из вкладок перезапишет рекорд другой.
-- Сохранять ли дату последней игры отдельно от массива рекордов (статистика «играл ли вообще»)? Пока — нет, достаточно поля `date` внутри каждой записи.
-- Нужен ли импорт/экспорт таблицы рекордов (копировать строку JSON вручную)? Вне MVP.
-- Стратегия при обнаружении битого JSON: «вернуть пусто, но не затирать» или «затереть сразу»? Сейчас выбрано первое; может быть пересмотрено, если окажется, что битые данные накапливаются после багов прошлых версий.
+- Whether to protect against concurrent writes from multiple tabs of the same origin (`storage` event)? For MVP: ignored — opening two tabs is rare, and the worst case is one tab overwriting the other's record.
+- Whether to store the date of the last game separately from the score array (statistics "played at all")? For now — no; the `date` field inside each entry is sufficient.
+- Whether to add import/export of the score table (copy JSON string manually)? Out of MVP scope.
+- Strategy on detecting corrupt JSON: "return empty but don't overwrite" or "overwrite immediately"? Currently the former; may be revisited if corrupt data accumulates from bugs in past versions.

@@ -1,120 +1,120 @@
-# Архитектура — Астероиды
+# Architecture — Asteroids
 
-## Обзор
-Однопользовательская браузерная аркада в духе Atari Asteroids 1979, реализованная на TypeScript + Canvas 2D и собираемая Vite в статический бандл. Приложение — чистый фронтенд без серверной части: вся логика игры (физика, коллизии, волны, подсчёт очков) исполняется в главном потоке браузера, единственное внешнее хранилище — `localStorage` для таблицы рекордов. Ядро архитектуры — стабильный game loop с фиксированным шагом симуляции поверх `requestAnimationFrame` и стек состояний сцены (меню / игра / пауза / game over). Стиль кода — классический ООП: каждая игровая сущность (Ship, Asteroid, Bullet, Ufo, Particle) реализует общий контракт `update(dt) / draw(ctx)`. Графика — только векторные линии на Canvas 2D, без ассетов, звуков и внешних шрифтов.
+## Overview
+A single-player browser arcade game in the spirit of Atari Asteroids (1979), implemented in TypeScript + Canvas 2D and bundled by Vite into a static build. The application is a pure front-end with no server-side: all game logic (physics, collisions, waves, scoring) executes in the browser's main thread; the only external storage is `localStorage` for the high-score table. The architectural core is a stable game loop with a fixed simulation step on top of `requestAnimationFrame` and a scene state stack (menu / game / pause / game over). The code style is classic OOP: every game entity (Ship, Asteroid, Bullet, Ufo, Particle) implements the common contract `update(dt) / draw(ctx)`. Graphics — only vector lines on Canvas 2D, no assets, sounds, or external fonts.
 
-## Ключевые архитектурные решения
-- **Canvas 2D вместо WebGL/PixiJS** — объём графики (десятки линий на кадр) тривиально покрывается `CanvasRenderingContext2D`; WebGL был бы избыточен и усложнил бы сборку.
-- **Vite как сборщик** — даёт нативную поддержку TypeScript, dev-server с HMR и минимальную конфигурацию для проекта-одностраничника; продакшен-артефакт — статические файлы.
-- **Фиксированный шаг симуляции 60 Hz поверх `requestAnimationFrame`** — детерминированная физика и коллизии не зависят от частоты кадров монитора; рендер идёт в темпе браузера, симуляция — с фиксированным `dt = 1/60` через аккумулятор времени. 60 Hz для этой игры достаточно, 120 Hz дал бы плавнее физику, но удвоил нагрузку без заметной выгоды.
-- **Классический ООП, без ECS** — объём сущностей небольшой, связи простые; полноценный ECS даёт больше сложности, чем экономит.
-- **Стек сцен (state machine)** — переходы меню ↔ игра ↔ пауза ↔ game over естественно ложатся на стек состояний с методами `enter/exit/update/draw/handleInput`.
-- **Единый базовый контракт `Entity`** — все игровые объекты обновляются и рисуются однообразно, World хранит их в плоских списках и перебирает одним циклом.
-- **Circle-to-circle коллизии, без broad-phase структур** — на ожидаемом числе объектов (единицы–десятки) наивное O(n²) по парам дешевле, чем поддержка quad-tree.
-- **Экран-тор (wrap-around)** — координаты нормализуются по модулю размера канваса в одном месте (Renderer + update), без специальной геометрии.
-- **`localStorage` как единственное персистентное хранилище** — требование концепта; абстрагируется тонким адаптером для изоляции от остального кода.
-- **Никаких внешних ассетов** — рендер полностью процедурный (линии + `fillText` моноширинным), что убирает этап загрузки и упрощает деплой.
+## Key Architectural Decisions
+- **Canvas 2D instead of WebGL/PixiJS** — the volume of graphics (dozens of lines per frame) is trivially handled by `CanvasRenderingContext2D`; WebGL would be overkill and would complicate the build.
+- **Vite as the bundler** — provides native TypeScript support, a dev server with HMR, and minimal configuration for a single-page project; the production artifact is static files.
+- **Fixed 60 Hz simulation step on top of `requestAnimationFrame`** — deterministic physics and collisions are independent of the monitor's refresh rate; rendering runs at the browser's pace, simulation runs at a fixed `dt = 1/60` via a time accumulator. 60 Hz is sufficient for this game; 120 Hz would give smoother physics but double the load without a noticeable benefit.
+- **Classic OOP, no ECS** — the number of entity types is small, relationships are simple; a full ECS adds more complexity than it saves.
+- **Scene stack (state machine)** — transitions menu ↔ game ↔ pause ↔ game over map naturally onto a state stack with `enter/exit/update/draw/handleInput` methods.
+- **Unified base contract `Entity`** — all game objects are updated and drawn uniformly; World stores them in flat lists and iterates with a single loop.
+- **Circle-to-circle collisions, no broad-phase structures** — with the expected number of objects (units to tens), naive O(n²) over pairs is cheaper than maintaining a quad-tree.
+- **Torus screen (wrap-around)** — coordinates are normalized modulo canvas size in one place (Renderer + update), without special geometry.
+- **`localStorage` as the only persistent storage** — required by the concept; abstracted by a thin adapter to isolate it from the rest of the code.
+- **No external assets** — rendering is fully procedural (lines + `fillText` in monospace), which eliminates the loading stage and simplifies deployment.
 
-## Компоненты
+## Components
 
-**Bootstrap (main.ts + index.html)** — точка входа: создаёт `<canvas>`, инстанцирует `GameLoop`, `SceneManager` и стартовую сцену (MenuScene), подключает систему ввода к `window`. Владеет корневыми объектами приложения. Интерфейс — единственная функция `bootstrap()`, вызываемая при загрузке страницы. Зависит от всех ядровых подсистем.
+**Bootstrap (main.ts + index.html)** — entry point: creates `<canvas>`, instantiates `GameLoop`, `SceneManager`, and the starting scene (MenuScene), attaches the input system to `window`. Owns the root application objects. Interface — a single `bootstrap()` function called on page load. Depends on all core subsystems.
 
-**GameLoop** — отвечает за цикл `requestAnimationFrame` с аккумулятором времени и фиксированным шагом симуляции. Владеет накопленным временем и прошлым timestamp. Предоставляет методы `start() / stop()`, принимает callback-и `onUpdate(dt)` и `onRender(alpha)`. Не знает ничего об игровых объектах.
+**GameLoop** — responsible for the `requestAnimationFrame` loop with a time accumulator and a fixed simulation step. Owns accumulated time and the previous timestamp. Provides `start() / stop()` methods, accepts `onUpdate(dt)` and `onRender(alpha)` callbacks. Knows nothing about game objects.
 
-**SceneManager (стек сцен)** — держит стек активных сцен и делегирует `update/draw/handleInput` верхней сцене. Владеет стеком `Scene[]`. Интерфейс: `push(scene) / pop() / replace(scene) / update(dt) / draw(ctx) / handleInput(event)`. Зависит от интерфейса `Scene`. Пауза реализуется как push `PauseScene` поверх `GameScene` — нижняя продолжает рисоваться, но не апдейтится.
+**SceneManager (scene stack)** — holds a stack of active scenes and delegates `update/draw/handleInput` to the top scene. Owns the `Scene[]` stack. Interface: `push(scene) / pop() / replace(scene) / update(dt) / draw(ctx) / handleInput(event)`. Depends on the `Scene` interface. Pause is implemented by pushing `PauseScene` on top of `GameScene` — the lower scene continues to render but does not update.
 
-**Scene (интерфейс)** — базовый контракт экрана: `enter() / exit() / update(dt) / draw(ctx) / handleInput(action)`. Конкретные реализации: `MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`.
+**Scene (interface)** — base screen contract: `enter() / exit() / update(dt) / draw(ctx) / handleInput(action)`. Concrete implementations: `MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`.
 
-**GameScene / World** — центральная игровая сцена: владеет списками сущностей (ship, asteroids, bullets, ufos, particles), текущим счётом, числом жизней, ссылкой на `WaveManager`, `CollisionSystem` и `Scoring`. В `update(dt)` прогоняет все сущности, запускает коллизии, проверяет условия перехода волны и game over. В `draw(ctx)` отрисовывает все сущности и HUD. Зависит от `InputSystem`, `CollisionSystem`, `WaveManager`, `Scoring`, `HighScoreStorage`.
+**GameScene / World** — central game scene: owns lists of entities (ship, asteroids, bullets, ufos, particles), current score, lives count, a reference to `WaveManager`, `CollisionSystem`, and `Scoring`. In `update(dt)` it runs all entities, triggers collisions, checks wave transition and game-over conditions. In `draw(ctx)` it renders all entities and the HUD. Depends on `InputSystem`, `CollisionSystem`, `WaveManager`, `Scoring`, `HighScoreStorage`.
 
-**Entity (базовый класс/интерфейс)** — общий контракт всех игровых объектов: поля `position: Vec2`, `velocity: Vec2`, `radius: number`, `alive: boolean`; методы `update(dt)`, `draw(ctx)`. Конкретные подклассы добавляют собственное состояние и поведение.
+**Entity (base class/interface)** — common contract for all game objects: fields `position: Vec2`, `velocity: Vec2`, `radius: number`, `alive: boolean`; methods `update(dt)`, `draw(ctx)`. Concrete subclasses add their own state and behavior.
 
-**Ship** — корабль игрока. Владеет углом поворота (`heading`), флагами тяги и стрельбы, таймером перезарядки, счётчиком неуязвимости после респауна, таймером кулдауна гиперпространства. `update(dt)` применяет инерцию, тягу по вектору носа, wrap-around; `draw(ctx)` — треугольник линиями, с язычком пламени при тяге. Предоставляет методы `rotate(dir) / thrust(on) / fire() → Bullet? / hyperspace()`. Гиперпространство — мгновенный телепорт в случайную точку экрана с небольшим шансом «неудачного прыжка» (появление на астероиде), общий кулдаун после использования. Одновременно в воздухе не более 4 пуль игрока (ограничение на создание в `fire()`).
+**Ship** — the player's ship. Owns the rotation angle (`heading`), thrust and fire flags, a reload timer, a post-respawn invulnerability counter, and a hyperspace cooldown timer. `update(dt)` applies inertia, thrust along the heading vector, and wrap-around; `draw(ctx)` — a triangle in lines, with a flame tongue when thrusting. Provides `rotate(dir) / thrust(on) / fire() → Bullet? / hyperspace()` methods. Hyperspace is an instant teleport to a random screen location with a small chance of a "failed jump" (appearing on an asteroid), with a cooldown after use. No more than 4 player bullets in the air simultaneously (creation limited in `fire()`).
 
-**Asteroid** — астероид одного из размеров (large/medium/small). Владеет размером, формой (полигон из случайных радиусов для шершавого вида), угловой скоростью. `update(dt)` двигает и вращает; `draw(ctx)` — замкнутая ломаная. Метод `split() → Asteroid[]` возвращает два меньших астероида при уничтожении (или пустой массив для small).
+**Asteroid** — an asteroid of one of three sizes (large/medium/small). Owns the size, shape (polygon of random radii for a rough look), and angular velocity. `update(dt)` moves and rotates; `draw(ctx)` — a closed polyline. Method `split() → Asteroid[]` returns two smaller asteroids on destruction (or an empty array for small).
 
-**Bullet** — пуля, живёт ограниченное время (TTL). Владеет `lifetime`, флагом источника (`fromShip | fromUfo`). `update(dt)` двигает с постоянной скоростью и уменьшает `lifetime`; при нуле — `alive = false`.
+**Bullet** — a bullet with a limited lifetime (TTL). Owns `lifetime`, a source flag (`fromShip | fromUfo`). `update(dt)` moves at constant speed and decreases `lifetime`; when it reaches zero — `alive = false`.
 
-**Ufo** — НЛО двух типов (large/small, влияет на точность и очки). Владеет AI-таймером смены направления и таймером выстрела. `update(dt)` двигает по экрану, периодически меняя курс и стреляя во врагa; `draw(ctx)` — стилизованный силуэт линиями.
+**Ufo** — a UFO in one of two types (large/small, affecting accuracy and points). Owns an AI direction-change timer and a fire timer. `update(dt)` moves across the screen, periodically changing course and shooting at the enemy; `draw(ctx)` — a stylized silhouette in lines.
 
-**Particle** — короткоживущая частица для эффекта взрыва (линия или точка с TTL и затуханием). Владеет `lifetime`, цветом/яркостью. Создаётся пачками при разрушении астероида/корабля/НЛО. Входит в MVP.
+**Particle** — a short-lived particle for an explosion effect (a line or point with TTL and fade). Owns `lifetime`, color/brightness. Created in batches on asteroid/ship/UFO destruction. Part of MVP.
 
-**InputSystem** — слушает `keydown/keyup` на `window`, мапит клавиши в абстрактные actions (`RotateLeft`, `RotateRight`, `Thrust`, `Fire`, `Hyperspace`, `Pause`, `Confirm`). Владеет таблицей биндингов и текущим состоянием зажатых actions. Интерфейс: `isDown(action) → bool`, `onPressed(action, cb)`, `consumeEvent(event)`. Активная сцена читает состояние ввода каждый тик.
+**InputSystem** — listens to `keydown/keyup` on `window`, maps keys to abstract actions (`RotateLeft`, `RotateRight`, `Thrust`, `Fire`, `Hyperspace`, `Pause`, `Confirm`). Owns the binding table and the current state of held actions. Interface: `isDown(action) → bool`, `onPressed(action, cb)`, `consumeEvent(event)`. The active scene reads the input state each tick.
 
-**CollisionSystem** — проверяет пересечения кругов для релевантных пар: bullet(ship)↔asteroid, bullet(ship)↔ufo, bullet(ufo)↔ship, ship↔asteroid, ship↔ufo. Не владеет данными, работает по ссылкам на списки сущностей World. Интерфейс: `detect(world) → CollisionEvent[]`, где событие — пара сущностей, которые столкнулись. Резолюция коллизий (удаление, сплит астероида, начисление очков, потеря жизни) делается в World по списку событий.
+**CollisionSystem** — checks circle intersections for relevant pairs: bullet(ship)↔asteroid, bullet(ship)↔ufo, bullet(ufo)↔ship, ship↔asteroid, ship↔ufo. Does not own data; works with references to World's entity lists. Interface: `detect(world) → CollisionEvent[]`, where an event is a pair of colliding entities. Collision resolution (removal, asteroid split, scoring, life loss) is done in World using the event list.
 
-**WaveManager** — управляет волнами: хранит номер текущей волны, генерирует стартовый набор астероидов (размеры large, разбросанные по краям экрана, не ближе заданного радиуса от корабля), решает, когда спавнить НЛО (по таймеру/вероятности, зависящей от номера волны). Интерфейс: `startWave(n) → Asteroid[]`, `maybeSpawnUfo(dt, world) → Ufo?`, `isCleared(world) → bool`.
+**WaveManager** — manages waves: stores the current wave number, generates the starting set of asteroids (large size, scattered around screen edges, no closer than a given radius to the ship), decides when to spawn a UFO (by timer/probability depending on wave number). Interface: `startWave(n) → Asteroid[]`, `maybeSpawnUfo(dt, world) → Ufo?`, `isCleared(world) → bool`.
 
-**Scoring** — держит текущие очки, число жизней, начисления за уничтожения (очки зависят от размера астероида и типа НЛО). Интерфейс: `addPoints(kind)`, `loseLife()`, `isGameOver() → bool`, `snapshot() → {score, lives, wave}`. Начисление бонусных жизней на пороговых значениях очков — здесь же.
+**Scoring** — holds current score, lives count, kill awards (points depend on asteroid size and UFO type). Interface: `addPoints(kind)`, `loseLife()`, `isGameOver() → bool`, `snapshot() → {score, lives, wave}`. Bonus life awarding at score thresholds is handled here.
 
-**HighScoreStorage** — тонкий адаптер над `localStorage`: сериализует/десериализует массив записей `{name, score, date}`, сортирует, обрезает до топ-10. Имя игрока — ровно 3 символа в стиле аркад (AAA). Интерфейс: `load() → Score[]`, `trySubmit(score, name) → boolean` (true, если попал в топ-10), `clear()`. Единственная точка взаимодействия с `window.localStorage`.
+**HighScoreStorage** — a thin adapter over `localStorage`: serializes/deserializes the array of `{name, score, date}` records, sorts and trims to top-10. The player name is exactly 3 characters in arcade style (AAA). Interface: `load() → Score[]`, `trySubmit(score, name) → boolean` (true if ranked in top-10), `clear()`. The only point of interaction with `window.localStorage`.
 
-**Renderer (утилиты)** — набор функций для рисования на `CanvasRenderingContext2D`: векторные примитивы (polyline, triangle, circle outline), wrap-around отрисовка (объект у края рисуется дополнительно со смещением на размер канваса, чтобы корректно показывать «переезд»), текст моноширинным шрифтом. Не хранит состояние. Используется сценами и `draw(ctx)`-методами сущностей.
+**Renderer (utilities)** — a set of functions for drawing on `CanvasRenderingContext2D`: vector primitives (polyline, triangle, circle outline), wrap-around drawing (an object near the edge is also drawn offset by the canvas size to correctly show "crossing"), monospace text. No state. Used by scenes and `draw(ctx)` methods of entities.
 
-**Vec2 и math utils** — двумерный вектор с операциями add/sub/scale/rotate/length/normalize и утилиты (случайное число в диапазоне, wrap-модуль, степени и клампы). Без состояния, чистые функции/иммутабельные значения.
+**Vec2 and math utils** — a 2D vector with add/sub/scale/rotate/length/normalize operations and utilities (random number in range, wrap-modulo, powers and clamps). Stateless, pure functions/immutable values.
 
-## Потоки данных
+## Data Flows
 
-**Тик игрового цикла.** `requestAnimationFrame` будит `GameLoop`, тот вычисляет прошедшее с прошлого кадра время и прибавляет его к аккумулятору. Пока аккумулятор ≥ фиксированного шага (например, 1/60 с), вызывается `SceneManager.update(dt)` с этим фиксированным `dt`, и аккумулятор уменьшается. Верхняя сцена (обычно `GameScene`) читает состояние `InputSystem`, применяет действия к кораблю (поворот, тяга, стрельба, гиперпространство), затем прогоняет `update(dt)` всех сущностей, затем `CollisionSystem.detect(world)`, затем разрешает коллизии (убивает сущности, сплитит астероиды, тратит жизнь, добавляет очки и частицы), затем спрашивает `WaveManager`: очищена ли волна, надо ли спавнить НЛО. После обработки всех шагов симуляции один раз вызывается `SceneManager.draw(ctx)` — активная сцена рисует мир и HUD через Renderer-утилиты.
+**Game loop tick.** `requestAnimationFrame` wakes `GameLoop`, which calculates elapsed time since the last frame and adds it to the accumulator. While the accumulator ≥ the fixed step (e.g. 1/60 s), `SceneManager.update(dt)` is called with that fixed `dt`, and the accumulator is decremented. The top scene (usually `GameScene`) reads `InputSystem` state, applies actions to the ship (rotation, thrust, fire, hyperspace), then runs `update(dt)` on all entities, then `CollisionSystem.detect(world)`, then resolves collisions (kills entities, splits asteroids, spends a life, adds points and particles), then asks `WaveManager`: is the wave cleared, should a UFO be spawned? After all simulation steps, `SceneManager.draw(ctx)` is called once — the active scene draws the world and HUD via Renderer utilities.
 
-**Ввод игрока → действие сущности.** Событие клавиатуры ловится `InputSystem` на уровне `window`, переводится в action по таблице биндингов, обновляет внутреннее состояние (набор зажатых actions, очередь только-что нажатых). На ближайшем тике `GameScene` читает `InputSystem.isDown(Thrust)`, `isDown(RotateLeft)` и вызывает соответствующие методы `Ship`; `onPressed(Fire)` приводит к попытке создать `Bullet` с учётом таймера перезарядки; `onPressed(Pause)` выполняет `SceneManager.push(PauseScene)` и дальнейшие тики симуляции замораживаются.
+**Player input → entity action.** A keyboard event is caught by `InputSystem` at the `window` level, translated to an action via the binding table, and updates the internal state (set of held actions, queue of just-pressed). On the next tick, `GameScene` reads `InputSystem.isDown(Thrust)`, `isDown(RotateLeft)` and calls the corresponding `Ship` methods; `onPressed(Fire)` triggers an attempt to create a `Bullet` respecting the reload timer; `onPressed(Pause)` executes `SceneManager.push(PauseScene)` and further simulation ticks are frozen.
 
-**Завершение волны и спавн следующей.** После разрешения коллизий `GameScene` спрашивает `WaveManager.isCleared(world)`. Если астероидов не осталось и нет активных НЛО, `WaveManager` инкрементирует номер волны, генерирует новый набор `Asteroid[]` через `startWave(n+1)` — с ростом количества и/или скорости, — и World добавляет их в свой список. Параллельно `WaveManager.maybeSpawnUfo(dt, world)` на каждом тике с растущей вероятностью решает, не пора ли добавить НЛО.
+**Wave end and next wave spawn.** After collision resolution, `GameScene` calls `WaveManager.isCleared(world)`. If no asteroids remain and there are no active UFOs, `WaveManager` increments the wave number, generates a new `Asteroid[]` via `startWave(n+1)` — with increased count and/or speed — and World adds them to its list. In parallel, `WaveManager.maybeSpawnUfo(dt, world)` on each tick probabilistically decides whether to add a UFO.
 
-**Game over и рекорд.** Когда `Scoring.isGameOver()` становится true (жизни кончились после последнего столкновения), `GameScene` делает `SceneManager.replace(GameOverScene)`, передавая финальный счёт. `GameOverScene` вызывает `HighScoreStorage.trySubmit(score, name)`; адаптер читает текущий массив из `localStorage`, вставляет запись, сортирует по убыванию счёта, обрезает до топ-N и записывает обратно. Сцена отображает таблицу рекордов; по `Confirm` возвращается в `MenuScene`.
+**Game over and high score.** When `Scoring.isGameOver()` becomes true (lives exhausted after the last collision), `GameScene` calls `SceneManager.replace(GameOverScene)`, passing the final score. `GameOverScene` calls `HighScoreStorage.trySubmit(score, name)`; the adapter reads the current array from `localStorage`, inserts the record, sorts by descending score, trims to top-N, and writes back. The scene displays the high-score table; pressing `Confirm` returns to `MenuScene`.
 
-## Модель данных (верхний уровень)
+## Data Model (Top Level)
 
-Состояние игры живёт в памяти вкладки и представлено объектами:
+Game state lives in tab memory and is represented by objects:
 
-- `World { ship: Ship?, asteroids: Asteroid[], bullets: Bullet[], ufos: Ufo[], particles: Particle[], score: number, lives: number, wave: number }` — агрегат активной партии.
-- `Entity { position: Vec2, velocity: Vec2, radius: number, alive: boolean }` — общий скелет.
+- `World { ship: Ship?, asteroids: Asteroid[], bullets: Bullet[], ufos: Ufo[], particles: Particle[], score: number, lives: number, wave: number }` — aggregate of the active game session.
+- `Entity { position: Vec2, velocity: Vec2, radius: number, alive: boolean }` — common skeleton.
 - `Ship extends Entity { heading: number, thrusting: boolean, cooldown: number, invulnUntil: number }`.
 - `Asteroid extends Entity { size: 'large' | 'medium' | 'small', shape: number[], angularVelocity: number }`.
 - `Bullet extends Entity { lifetime: number, source: 'ship' | 'ufo' }`.
 - `Ufo extends Entity { kind: 'large' | 'small', directionTimer: number, fireTimer: number }`.
 - `Particle extends Entity { lifetime: number }`.
-- `InputBindings { [keyCode: string]: Action }` — таблица маппинга.
-- `Action` — перечисление абстрактных действий.
+- `InputBindings { [keyCode: string]: Action }` — mapping table.
+- `Action` — enum of abstract actions.
 - `CollisionEvent { a: Entity, b: Entity, kind: 'bulletAsteroid' | 'shipAsteroid' | 'bulletShip' | 'shipUfo' | 'bulletUfo' }`.
 
-Персистентно — только таблица рекордов в `localStorage` по ключу вида `asteroids.highscores`:
+Persistently — only the high-score table in `localStorage` under the key `asteroids.highscores`:
 
 - `ScoreEntry { name: string, score: number, date: string }`.
-- `HighScores = ScoreEntry[]` — отсортированный по убыванию, длина ограничена (например, топ-10).
+- `HighScores = ScoreEntry[]` — sorted by descending score, length capped (e.g. top-10).
 
-Связи: `World` 1↔0..1 `Ship`, 1↔* `Asteroid/Bullet/Ufo/Particle`. `WaveManager` и `Scoring` — сателлиты `World`, не содержат сущностей. `HighScoreStorage` связан только с `GameOverScene`.
+Relations: `World` 1↔0..1 `Ship`, 1↔* `Asteroid/Bullet/Ufo/Particle`. `WaveManager` and `Scoring` are `World` satellites, not containing entities. `HighScoreStorage` is connected only to `GameOverScene`.
 
-## Стек
+## Stack
 
-- **Язык: TypeScript** — типы ловят ошибки на переходах между сценами/сущностями и делают рефакторинг безопасным.
-- **Рендер: Canvas 2D (`CanvasRenderingContext2D`)** — объём графики тривиален, API встроен в браузер, никакого ассет-пайплайна не требуется.
-- **Сборка: Vite** — нативная поддержка TS, быстрый dev-server с HMR, продакшен-сборка в чистую статику одной командой.
-- **Game loop: `requestAnimationFrame` + аккумулятор времени** — стандартный подход для детерминированной симуляции поверх переменной частоты рендера.
-- **Парадигма: классический ООП (классы ES2022, наследование от `Entity`)** — малое количество типов сущностей, простые связи, ECS избыточен.
-- **Хранилище: `window.localStorage`** — единственное, что нужно персистентно (рекорды), доступно без зависимостей.
-- **Тестов нет** — проект учебный, небольшой, тесты в MVP не пишем; корректность проверяется ручным прогоном.
-- **Линт/формат: ESLint + Prettier** — стандарт для TS-проектов, держит код единообразным.
-- **Шрифт: системный monospace через CSS + `ctx.font`** — без внешних шрифтов, ретро-стиль сохраняется.
-- **Ассеты: нет** — рендер чисто процедурный, звуков нет.
+- **Language: TypeScript** — types catch errors at scene/entity transitions and make refactoring safe.
+- **Rendering: Canvas 2D (`CanvasRenderingContext2D`)** — the volume of graphics is trivial, the API is built into the browser, no asset pipeline is needed.
+- **Build: Vite** — native TS support, fast dev server with HMR, production build to pure statics with a single command.
+- **Game loop: `requestAnimationFrame` + time accumulator** — standard approach for deterministic simulation over variable render frequency.
+- **Paradigm: classic OOP (ES2022 classes, inheritance from `Entity`)** — small number of entity types, simple relations, ECS is excessive.
+- **Storage: `window.localStorage`** — the only thing needed persistently (records), available without dependencies.
+- **No tests** — educational project, small; correctness is verified by manual play-testing.
+- **Lint/format: ESLint + Prettier** — standard for TS projects, keeps code uniform.
+- **Font: system monospace via CSS + `ctx.font`** — no external fonts, retro style is preserved.
+- **Assets: none** — rendering is purely procedural, no sounds.
 
-## Сквозная функциональность
+## Cross-Cutting Concerns
 
-**Аутентификация.** Отсутствует: игра однопользовательская и оффлайн. При попадании в таблицу рекордов игрок вводит короткий ник (3 символа в стиле оригинала) — он хранится только локально и не является аккаунтом.
+**Authentication.** Absent: the game is single-player and offline. When entering the high-score table the player types a short nickname (3 characters in the style of the original) — stored only locally, not an account.
 
-**Логирование.** В dev-сборке — `console.log/warn/error` с префиксом подсистемы (`[loop]`, `[input]`, `[collision]`). В продакшен-сборке логирование подавляется через флаг окружения Vite (`import.meta.env.DEV`). Внешних сервисов логирования нет.
+**Logging.** In dev builds — `console.log/warn/error` with subsystem prefix (`[loop]`, `[input]`, `[collision]`). In production builds logging is suppressed via the Vite environment flag (`import.meta.env.DEV`). No external logging services.
 
-**Обработка ошибок.** Ошибки доступа к `localStorage` (например, приватный режим браузера, переполнение) ловятся внутри `HighScoreStorage` и приводят к graceful degradation — таблица рекордов считается пустой, запись игнорируется, пользователю ошибка не показывается. Исключения в `update/draw` в dev-сборке останавливают игру с осмысленным сообщением; в проде — ловятся верхнеуровневым try/catch вокруг тика игрового цикла, игра возвращается в `MenuScene`.
+**Error handling.** Errors accessing `localStorage` (e.g. private mode, quota exceeded) are caught inside `HighScoreStorage` and lead to graceful degradation — the high-score table is treated as empty, writes are ignored, the user sees no error. Exceptions in `update/draw` in dev builds stop the game with an informative message; in production they are caught by a top-level try/catch around the game loop tick, and the game returns to `MenuScene`.
 
-**Конфигурация.** Все игровые константы (скорость корабля, сила тяги, время жизни пули, размеры астероидов, стартовое число жизней, пороги волн, очки за уничтожения, размер топа рекордов) вынесены в отдельный модуль `config.ts` как именованные константы. Нет рантайм-конфигурации из внешних источников. Биндинги клавиатуры — константа того же модуля.
+**Configuration.** All game constants (ship speed, thrust force, bullet lifetime, asteroid sizes, starting lives, wave thresholds, kill scores, leaderboard size) are placed in a separate `config.ts` module as named constants. No runtime configuration from external sources. Keyboard bindings are a constant in that same module.
 
-**Observability.** Ограничивается dev-инструментами: опциональный HUD-оверлей в dev-сборке с FPS, числом активных сущностей и текущим номером волны. В продакшене — только игровой HUD (счёт, жизни). Ни метрик, ни телеметрии наружу не уходит.
+**Observability.** Limited to dev tools: an optional HUD overlay in dev builds showing FPS, number of active entities, and current wave number. In production — only the game HUD (score, lives). No metrics or telemetry are sent externally.
 
-## Топология деплоя
+## Deployment Topology
 
-Продакшен-артефакт — набор статических файлов, получаемых командой `vite build`: `index.html`, один JS-бандл, один CSS (минимальный, только для canvas-вёрстки и фона). Все компоненты живут в этом бандле и исполняются в главном потоке браузера пользователя. Нет ни сервера, ни бекенда, ни API-вызовов. Артефакт можно открыть как локальный файл или отдать с любого статического хостинга (GitHub Pages, Netlify, nginx — любой); CI/CD-конвейер сводится к «собрать и загрузить папку `dist/`». Состояние игры и рекорды — в памяти вкладки и в `localStorage` того же origin; при смене браузера или очистке данных сайта рекорды теряются. Сборка для dev — `vite dev` с HMR, та же файловая структура, тот же код.
+The production artifact is a set of static files produced by `vite build`: `index.html`, one JS bundle, one CSS (minimal, only canvas layout and background). All components live in this bundle and execute in the user's browser main thread. No server, no backend, no API calls. The artifact can be opened as a local file or served from any static host (GitHub Pages, Netlify, nginx — any); the CI/CD pipeline amounts to "build and upload the `dist/` folder". Game state and records live in tab memory and `localStorage` of the same origin; changing browser or clearing site data loses the records. Dev build — `vite dev` with HMR, same file structure, same code.
 
-## Открытые вопросы
+## Open Questions
 
-- Точные значения баланса (скорости, размеры, количество астероидов на волну, частота НЛО, пороги бонусных жизней, кулдаун гиперпространства и вероятность «неудачного прыжка») — подлежат тюнингу после первой играбельной сборки.
-- Поддержка только стрелок или и стрелки, и WASD одновременно — решим на этапе модуля `InputSystem`.
+- Exact balance values (speeds, sizes, asteroids per wave, UFO frequency, bonus life thresholds, hyperspace cooldown and "failed jump" probability) — subject to tuning after the first playable build.
+- Support only arrow keys or both arrows and WASD simultaneously — to be decided at the `InputSystem` module stage.

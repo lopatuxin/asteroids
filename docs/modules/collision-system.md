@@ -1,49 +1,49 @@
-# Модуль `collision-system`
+# Module `collision-system`
 
-## Назначение
+## Purpose
 
-Модуль определяет систему детекции circle-to-circle пересечений между игровыми сущностями. Его единственная работа — за один проход по миру выявить все пары сущностей, которые столкнулись в текущем тике, и вернуть список `CollisionEvent` для последующей резолюции в `World`. Без него в игре нет никаких взаимодействий между пулями, астероидами, кораблём и НЛО — а значит, нет ни уничтожения астероидов, ни потери жизней, ни набора очков. Модуль сознательно отделён от резолюции: он ничего не мутирует и не принимает игровых решений, что делает его чистой, предсказуемой и легко отлаживаемой частью пайплайна.
+The module defines a circle-to-circle intersection detection system between game entities. Its sole job is to identify all pairs of entities that collided in the current tick in a single world pass, and return a list of `CollisionEvent`s for subsequent resolution in `World`. Without it there are no interactions between bullets, asteroids, the ship, and UFOs — meaning no asteroid destruction, no life loss, and no point scoring. The module is deliberately separated from resolution: it mutates nothing and makes no game decisions, making it a clean, predictable, easily debuggable part of the pipeline.
 
-## Ответственности
+## Responsibilities
 
-- Объявление типа `CollisionEvent` и перечисления видов коллизий (`CollisionKind`).
-- Реализация функции/метода `detect(world): CollisionEvent[]` — чистой функции, которая пробегает релевантные пары сущностей и возвращает список обнаруженных пересечений.
-- Проверка пересечения двух кругов по формуле `distanceSq(a.position, b.position) < (a.radius + b.radius)²` — без квадратного корня ради производительности.
-- Учёт wrap-around (экран-тор): при сравнении расстояний между сущностями учитывается вариант «через край» — torus-distance, а не просто евклидова дистанция в координатах канваса.
-- Фильтрация неподходящих пар:
-  - мёртвые сущности (`alive === false`) пропускаются;
-  - неуязвимый корабль (`now < ship.invulnUntil`, либо эквивалентный флаг) исключает все пары `Ship—*`;
-  - пуля не проверяется против своего источника: пуля корабля не может попасть в корабль, пуля НЛО — в НЛО.
-- Возврат стабильной формы события: `{ kind, a, b }`, где `a` и `b` — ссылки на `Entity`-экземпляры из `World` (не копии).
+- Declaring the `CollisionEvent` type and the collision kind enumeration (`CollisionKind`).
+- Implementing the `detect(world): CollisionEvent[]` function/method — a pure function that iterates relevant entity pairs and returns a list of detected intersections.
+- Checking two-circle intersection via the formula `distanceSq(a.position, b.position) < (a.radius + b.radius)²` — without a square root for performance.
+- Accounting for wrap-around (torus screen): when comparing distances between entities, the "across the edge" variant is considered — torus distance, not plain Euclidean distance in canvas coordinates.
+- Filtering irrelevant pairs:
+  - dead entities (`alive === false`) are skipped;
+  - an invulnerable ship (`now < ship.invulnUntil`, or an equivalent flag) excludes all `Ship—*` pairs;
+  - a bullet is not checked against its source: a ship bullet cannot hit the ship, a UFO bullet cannot hit the UFO.
+- Returning a stable event shape: `{ kind, a, b }`, where `a` and `b` are references to `Entity` instances from `World` (not copies).
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не мутирует `world`: не выставляет `alive = false`, не изменяет позиции, не обнуляет `bulletsInFlight`, не начисляет очки. Вся резолюция — в `World.resolveCollisions(events)`.
-- Не создаёт и не удаляет сущности: не сплитит астероиды, не спавнит частицы взрыва, не списывает жизни, не делает респаун корабля.
-- Не знает про очки, волны, HUD, сцены, звуки, ввод.
-- Не содержит broad-phase структур (quad-tree, spatial hash, sweep-and-prune): ожидаемое число сущностей — единицы–десятки, наивное O(n²) на релевантных парах дешевле поддержки любой broad-phase.
-- Не проверяет непопарные конфигурации (например, continuous collision detection для быстрых пуль): работаем строго по дискретным снимкам позиций в начале/конце тика, после `integrate`.
-- Не занимается разрешением «двойной смерти» (пуля попала в два астероида в одном тике): просто вернёт два события, `World` сам решит, что делать (обычно — одно из них будет no-op после первой резолюции).
-- Не содержит рантайм-валидации аргументов и не выбрасывает собственных исключений.
-- Не сортирует и не дедуплицирует события: порядок — в порядке обхода списков.
+- Does not mutate `world`: does not set `alive = false`, does not change positions, does not reset `bulletsInFlight`, does not award points. All resolution is in `World.resolveCollisions(events)`.
+- Does not create or delete entities: does not split asteroids, does not spawn explosion particles, does not deduct lives, does not respawn the ship.
+- Does not know about points, waves, HUD, scenes, sounds, or input.
+- Does not contain broad-phase structures (quad-tree, spatial hash, sweep-and-prune): the expected number of entities is a handful to a few dozen; naïve O(n²) over relevant pairs is cheaper than maintaining any broad-phase.
+- Does not check non-pairwise configurations (e.g. continuous collision detection for fast bullets): works strictly on discrete position snapshots at the start/end of a tick, after `integrate`.
+- Does not handle "double-death" resolution (bullet hitting two asteroids in one tick): simply returns two events; `World` decides what to do (typically — one of them is a no-op after the first resolution).
+- Contains no runtime argument validation and throws no exceptions of its own.
+- Does not sort or deduplicate events: order follows list traversal order.
 
-## Публичный интерфейс
+## Public Interface
 
-Типы:
+Types:
 
-- `type CollisionKind = 'bulletShipAsteroid' | 'bulletShipUfo' | 'bulletUfoShip' | 'shipAsteroid' | 'shipUfo'` — пять разрешённых видов пар.
-- `type CollisionEvent = { kind: CollisionKind; a: Entity; b: Entity }` — описание одной пары столкнувшихся сущностей. Ссылки `a` и `b` указывают на реальные объекты из списков `World`; `kind` даёт достаточно информации, чтобы `World` знал, какие поля у `a`/`b` безопасно трактовать как `Bullet`/`Ship`/`Asteroid`/`Ufo` (без `instanceof`-диспетчеризации в резолюции).
+- `type CollisionKind = 'bulletShipAsteroid' | 'bulletShipUfo' | 'bulletUfoShip' | 'shipAsteroid' | 'shipUfo'` — five allowed pair types.
+- `type CollisionEvent = { kind: CollisionKind; a: Entity; b: Entity }` — describes one pair of colliding entities. References `a` and `b` point to real objects from `World` lists; `kind` provides enough information for `World` to know which fields of `a`/`b` are safe to treat as `Bullet`/`Ship`/`Asteroid`/`Ufo` (without `instanceof` dispatch in resolution).
 
-Функция (или статический метод класса `CollisionSystem`):
+Function (or static method of a `CollisionSystem` class):
 
-- `detect(world: World): CollisionEvent[]` — чистая функция. Принимает снимок мира по ссылке, ничего не мутирует, возвращает новый массив событий. Пустой массив — если пересечений нет.
+- `detect(world: World): CollisionEvent[]` — pure function. Accepts a snapshot of the world by reference, mutates nothing, returns a new event array. Empty array if no intersections.
 
-Внутренние вспомогательные (не обязательны к экспорту, но упоминаются в «Ключевых потоках»):
+Internal helpers (not required to be exported, mentioned in Key Flows):
 
-- `distanceSqTorus(a: Vec2, b: Vec2, width: number, height: number): number` — квадрат минимального расстояния между двумя точками на торе размером `width × height`. Может жить здесь или быть вынесена в `vec2-math` (см. «Открытые вопросы»).
+- `distanceSqTorus(a: Vec2, b: Vec2, width: number, height: number): number` — squared minimum distance between two points on a torus of size `width × height`. May live here or be moved to `vec2-math` (see Open Questions).
 - `circlesOverlap(a: Entity, b: Entity): boolean` — `distanceSqTorus(a.position, b.position, CANVAS.WIDTH, CANVAS.HEIGHT) < (a.radius + b.radius) ** 2`.
 
-Соответствия `kind` → типы `a`/`b`:
+`kind` → `a`/`b` type mapping:
 
 | `kind` | `a` | `b` |
 |---|---|---|
@@ -53,96 +53,96 @@
 | `shipAsteroid` | `Ship` | `Asteroid` |
 | `shipUfo` | `Ship` | `Ufo` |
 
-По этой таблице `World` определяет роли операндов в резолюции без дополнительных проверок типов.
+`World` uses this table to determine operand roles in resolution without additional type checks.
 
-## Модель данных
+## Data Model
 
-Модуль не владеет коллекциями и не имеет состояния. Все данные получает по ссылке из `World` и отдаёт обратно чистым списком событий.
+The module owns no collections and has no state. All data is received by reference from `World` and returned as a clean event list.
 
-**Форма `CollisionEvent`:**
+**`CollisionEvent` shape:**
 
-| Поле | Тип | Назначение |
+| Field | Type | Purpose |
 |---|---|---|
-| `kind` | `CollisionKind` | дискриминант для резолюции |
-| `a` | `Entity` | первая сущность пары; конкретный тип задан таблицей `kind` |
-| `b` | `Entity` | вторая сущность пары; конкретный тип задан таблицей `kind` |
+| `kind` | `CollisionKind` | discriminant for resolution |
+| `a` | `Entity` | first entity of the pair; concrete type given by the `kind` table |
+| `b` | `Entity` | second entity of the pair; concrete type given by the `kind` table |
 
-Порядок `a`/`b` нормализован по таблице: «пуля — всегда `a`», «корабль в паре с астероидом/НЛО — всегда `a`», «в паре пуля НЛО ↔ корабль пуля — `a`, корабль — `b`». Это исключает ветвления в резолюции.
+The `a`/`b` order is normalised by the table: "bullet is always `a`", "ship in a pair with asteroid/UFO is always `a`", "in a UFO bullet ↔ ship pair bullet is `a`, ship is `b`". This eliminates branching in resolution.
 
-Связей и индексов нет; персистентности нет.
+No relations or indexes; no persistence.
 
-## Ключевые потоки
+## Key Flows
 
-**Один проход `detect(world)`.** Функция собирает результирующий массив `events: CollisionEvent[]` и проходит по нескольким вложенным циклам по релевантным парам. Общая структура:
+**One `detect(world)` pass.** The function builds the result array `events: CollisionEvent[]` and iterates through several nested loops over relevant pairs. General structure:
 
-1. Определяется флаг `shipVulnerable = world.ship !== null && world.ship.alive && !isInvulnerable(world.ship, now)`. Если он `false`, все пары вида `Ship—*` пропускаются целиком — соответствующие внутренние циклы даже не запускаются.
-2. Цикл по `world.bullets`. Для каждой `bullet.alive` пули:
-   - Если `bullet.source === 'ship'`:
-     - вложенный цикл по `world.asteroids`: для каждого `asteroid.alive` проверяется `circlesOverlap(bullet, asteroid)`; при пересечении — `events.push({ kind: 'bulletShipAsteroid', a: bullet, b: asteroid })`;
-     - вложенный цикл по `world.ufos`: аналогично, с `kind: 'bulletShipUfo'`.
-     - Пара «пуля корабля — корабль» не проверяется: пуля не бьёт свой источник.
-   - Если `bullet.source === 'ufo'`:
-     - проверка против корабля: если `shipVulnerable`, `circlesOverlap(bullet, world.ship)` → `events.push({ kind: 'bulletUfoShip', a: bullet, b: world.ship })`.
-     - Пары «пуля НЛО — НЛО» и «пуля НЛО — астероид» не проверяются: по правилам скоупа пуля НЛО бьёт только корабль. (Если игра позже позволит НЛО разрушать астероиды, это добавит новую `kind`; пока — нет.)
-3. Если `shipVulnerable`:
-   - цикл по `world.asteroids`: для каждого `asteroid.alive` — `circlesOverlap(world.ship, asteroid)` → `events.push({ kind: 'shipAsteroid', a: world.ship, b: asteroid })`;
-   - цикл по `world.ufos`: аналогично, с `kind: 'shipUfo'`.
-4. Возврат `events`.
+1. A flag `shipVulnerable = world.ship !== null && world.ship.alive && !isInvulnerable(world.ship, now)` is determined. If `false`, all `Ship—*` pairs are skipped entirely — the corresponding inner loops do not run.
+2. Loop over `world.bullets`. For each `bullet.alive` bullet:
+   - If `bullet.source === 'ship'`:
+     - Nested loop over `world.asteroids`: for each `asteroid.alive`, check `circlesOverlap(bullet, asteroid)`; on intersection — `events.push({ kind: 'bulletShipAsteroid', a: bullet, b: asteroid })`;
+     - Nested loop over `world.ufos`: similarly, with `kind: 'bulletShipUfo'`.
+     - The pair "ship bullet — ship" is not checked: a bullet does not hit its own source.
+   - If `bullet.source === 'ufo'`:
+     - Check against the ship: if `shipVulnerable`, `circlesOverlap(bullet, world.ship)` → `events.push({ kind: 'bulletUfoShip', a: bullet, b: world.ship })`.
+     - Pairs "UFO bullet — UFO" and "UFO bullet — asteroid" are not checked: by scope rules a UFO bullet only hits the ship. (If the game later allows UFOs to destroy asteroids, a new `kind` would be added; for now — no.)
+3. If `shipVulnerable`:
+   - Loop over `world.asteroids`: for each `asteroid.alive` — `circlesOverlap(world.ship, asteroid)` → `events.push({ kind: 'shipAsteroid', a: world.ship, b: asteroid })`;
+   - Loop over `world.ufos`: similarly, with `kind: 'shipUfo'`.
+4. Return `events`.
 
-Сложность — O(|bullets| × (|asteroids| + |ufos|) + |asteroids| + |ufos|). При типичных размерах (до ~30 астероидов, до 5 пуль, 0–1 НЛО) это несколько сотен пар за кадр — ничтожно для 60 Hz.
+Complexity — O(|bullets| × (|asteroids| + |ufos|) + |asteroids| + |ufos|). At typical sizes (up to ~30 asteroids, up to 5 bullets, 0–1 UFOs) this is a few hundred pairs per frame — trivial at 60 Hz.
 
-**Проверка пересечения с учётом wrap-around.** Прямая евклидова проверка `(bx - ax)² + (by - ay)²` ломается для объектов у противоположных краёв канваса: астероид на `x = 955` и пуля на `x = 5` (при `CANVAS.WIDTH = 960`) визуально соседние на экране-торе, но формально удалены на ~950 пикселей. Чтобы покрыть этот случай, модуль использует torus-distance: для компоненты `x` берётся `dx = abs(a.x - b.x); dx = min(dx, CANVAS.WIDTH - dx)`, аналогично для `y`; затем `dSq = dx*dx + dy*dy`. Это эквивалентно перебору девяти «копий» одной из точек со смещениями `(±W, ±H)` и выбору ближайшей, но обходится двумя вызовами `min` на компоненту. Пересечение: `dSq < (a.radius + b.radius)²`. Такая проверка корректна для любых размеров радиусов, не превышающих половины меньшей стороны канваса (для Asteroids это выполняется с большим запасом — самый большой радиус около 40, половина канваса — 360+).
+**Intersection check with wrap-around.** Straight Euclidean check `(bx - ax)² + (by - ay)²` breaks for objects near opposite canvas edges: an asteroid at `x = 955` and a bullet at `x = 5` (with `CANVAS.WIDTH = 960`) are visually adjacent on the torus screen but formally ~950 pixels apart. To cover this case the module uses torus distance: for the `x` component, `dx = abs(a.x - b.x); dx = min(dx, CANVAS.WIDTH - dx)`, similarly for `y`; then `dSq = dx*dx + dy*dy`. This is equivalent to checking nine "copies" of one of the points with offsets `(±W, ±H)` and selecting the nearest, but costs only two `min` calls per component. Intersection: `dSq < (a.radius + b.radius)²`. This check is correct for any radii not exceeding half of the smaller canvas dimension (for Asteroids this holds with a large margin — the largest radius is about 40, half the canvas is 360+).
 
-**Пропуск неуязвимого корабля.** Сразу после респауна или в начале партии корабль проводит `SHIP.RESPAWN_INVULN_TIME` в состоянии неуязвимости. `detect` проверяет это через хелпер `isInvulnerable(ship, now)` (или эквивалент — зависит от финального решения по `Ship.invulnUntil` vs. `Ship.invulnRemaining`, см. `ship.md`, «Открытые вопросы»). Если корабль неуязвим, все три пары с его участием (`shipAsteroid`, `shipUfo`, `bulletUfoShip`) пропускаются. Пары «пуля игрока ↔ астероид/НЛО» продолжают проверяться как обычно — игрок может стрелять в неуязвимости.
+**Skipping the invulnerable ship.** Just after respawn or at the start of a game, the ship spends `SHIP.RESPAWN_INVULN_TIME` in invulnerability. `detect` checks this via the helper `isInvulnerable(ship, now)` (or equivalent — depends on the final decision on `Ship.invulnUntil` vs. `Ship.invulnRemaining`, see `ship.md`, Open Questions). If the ship is invulnerable, all three pairs involving it (`shipAsteroid`, `shipUfo`, `bulletUfoShip`) are skipped. Pairs "player bullet ↔ asteroid/UFO" continue to be checked normally — the player can shoot while invulnerable.
 
-**Пропуск мёртвых.** Любая сущность с `alive === false` пропускается на уровне цикла. Это касается и `world.ship`: если корабль уже убит и ещё не возрождён, `world.ship` может быть `null` (в зависимости от финальной схемы respawn) или живым объектом с `alive = false` — оба случая читаются как «корабля нет». Аналогично — астероиды и НЛО, убитые в предыдущих коллизиях того же тика не фильтруются внутри одного `detect` (все события собираются на одной версии снимка); `World` при резолюции просто игнорирует события, у которых хоть одна из сущностей уже стала `alive = false` от более раннего события того же пакета.
+**Skipping dead entities.** Any entity with `alive === false` is skipped at the loop level. This applies to `world.ship` as well: if the ship is already dead and not yet respawned, `world.ship` may be `null` (depending on the final respawn scheme) or a live object with `alive = false` — both cases read as "no ship". Similarly — asteroids and UFOs killed in earlier collisions of the same tick are not filtered inside a single `detect` call (all events are collected from one version of the snapshot); `World` in resolution simply ignores events where any entity already became `alive = false` from an earlier event in the same batch.
 
-**Пример прохождения тика.** Игрок стреляет; пуля движется; за шаг `integrate` пуля оказалась внутри круга астероида. `GameScene` вызывает `detect(world)`; функция находит пересечение и возвращает `[{ kind: 'bulletShipAsteroid', a: bullet, b: asteroid }]`. `World.resolveCollisions` по этому событию: `bullet.alive = false`; `asteroid.alive = false`; `asteroid.split()` → два новых `medium`-астероида добавляются в `world.asteroids`; `ship.onBulletExpired()` декрементирует счётчик; `Scoring.addPoints('asteroid.large')`; спавнятся частицы.
+**Example tick.** Player fires; bullet moves; after `integrate` the bullet ended up inside an asteroid's circle. `GameScene` calls `detect(world)`; the function finds the intersection and returns `[{ kind: 'bulletShipAsteroid', a: bullet, b: asteroid }]`. `World.resolveCollisions` on that event: `bullet.alive = false`; `asteroid.alive = false`; `asteroid.split()` → two new `medium` asteroids are added to `world.asteroids`; `ship.onBulletExpired()` decrements the counter; `Scoring.addPoints('asteroid.large')`; particles are spawned.
 
-## Зависимости
+## Dependencies
 
-- **`entity`** — тип `Entity` (для полей `CollisionEvent`), поля `position`, `radius`, `alive`.
-- **`ship`** — тип `Ship` и доступ к свойству неуязвимости (`invulnUntil` или производный хелпер `isInvulnerable`).
-- **`asteroid`** — тип `Asteroid` (только для типизации; детектор не читает специфических полей, только унаследованные).
-- **`bullet`** — тип `Bullet` и поле `source: 'ship' | 'ufo'` — основной фильтр пар.
-- **`ufo`** — тип `Ufo` (аналогично `Asteroid`).
-- **`vec2-math`** — тип `Vec2`; функции `distanceSq` и/или новая `distanceSqTorus` (или реализация torus-distance внутри `collision-system` в качестве приватной функции).
-- **`config`** — `CANVAS.WIDTH`, `CANVAS.HEIGHT` для torus-distance.
-- **`world`** (тип) — сигнатура `detect(world: World)`. Импортируется как `import type { World }`, чтобы избежать циклической зависимости по значениям.
+- **`entity`** — type `Entity` (for `CollisionEvent` fields), fields `position`, `radius`, `alive`.
+- **`ship`** — type `Ship` and access to the invulnerability property (`invulnUntil` or derived helper `isInvulnerable`).
+- **`asteroid`** — type `Asteroid` (for typing only; the detector does not read type-specific fields, only inherited ones).
+- **`bullet`** — type `Bullet` and field `source: 'ship' | 'ufo'` — the primary pair filter.
+- **`ufo`** — type `Ufo` (analogously to `Asteroid`).
+- **`vec2-math`** — type `Vec2`; functions `distanceSq` and/or a new `distanceSqTorus` (or torus-distance implementation inside `collision-system` as a private function).
+- **`config`** — `CANVAS.WIDTH`, `CANVAS.HEIGHT` for torus distance.
+- **`world`** (type) — signature `detect(world: World)`. Imported as `import type { World }` to avoid a circular value dependency.
 
-Обратные зависимости: `GameScene` вызывает `detect(world)` на каждом тике; `World.resolveCollisions` потребляет возвращаемый массив.
+Reverse dependencies: `GameScene` calls `detect(world)` each tick; `World.resolveCollisions` consumes the returned array.
 
-## Обработка ошибок
+## Error Handling
 
-- **Invalid input — `world` без `ship` (`world.ship === null`).** Штатный случай между респаунами. Все пары с кораблём пропускаются; пули, астероиды и НЛО между собой продолжают проверяться по правилам (в текущем скоупе — только `bulletShip-*`; взаимодействий «астероид ↔ НЛО» нет). Событий с участием корабля в результате не будет.
-- **Invalid input — пустые списки (`bullets = []`, `asteroids = []`, `ufos = []`).** Функция возвращает пустой массив за O(1) — все циклы не запускаются. Это ожидаемое состояние в начале/конце волны.
-- **Downstream failure.** Неприменимо: модуль синхронный, без I/O, без асинхронности, без внешних вызовов. Единственные внешние вызовы — чистые функции `vec2-math` и `Math.*`.
-- **Partial success.** Неприменимо: функция либо целиком выполнилась и вернула массив, либо пробросила исключение из какого-то внутреннего вызова (что означает баг — например, `NaN` в координатах). Промежуточных состояний нет, поскольку ничего не мутируется.
-- **`NaN`/`Infinity` в `position` или `radius`.** Сам детектор не фильтрует: сравнение `dSq < rSumSq` с `NaN` даст `false`, и пересечение просто не будет зафиксировано. Это fail-safe: никаких ложных событий, но баг не маскируется — пуля «пролетит сквозь» астероид, и это сразу станет видно в dev-сборке.
-- **Двойной счёт одного пересечения.** Исключён структурой циклов: каждая пара проверяется ровно один раз, порядок `(a, b)` нормализован таблицей `kind`.
-- **Событие после резолюции другого события того же пакета.** Пример: пуля попала в астероид `A`, тот же тик — пуля в астероид `B`; после резолюции первого события пуля уже `alive = false`, но событие на `B` уже лежит в массиве. Защита — в `World.resolveCollisions`: пропускать событие, если `!event.a.alive || !event.b.alive`. `detect` сам такую фильтрацию не делает (снимок цельный, согласованный).
-- **Исключения.** Сам модуль исключений не выбрасывает. Ошибка из `distanceSqTorus` невозможна при конечных входах; ошибка из `Math.*` тоже. Любое проброшенное исключение — баг вызывающего, ловится верхнеуровневым try/catch игрового цикла.
+- **Invalid input — `world` without `ship` (`world.ship === null`).** Normal case between respawns. All ship-related pairs are skipped; bullets, asteroids, and UFOs continue to be checked by their own rules (in current scope — only `bulletShip-*`; "asteroid ↔ UFO" interactions don't exist). No ship-involving events in the result.
+- **Invalid input — empty lists (`bullets = []`, `asteroids = []`, `ufos = []`).** The function returns an empty array in O(1) — all loops don't run. Expected state at the start/end of a wave.
+- **Downstream failure.** Not applicable: the module is synchronous, with no I/O, no async, and no external calls. The only external calls are pure `vec2-math` functions and `Math.*`.
+- **Partial success.** Not applicable: the function either completed fully and returned an array, or propagated an exception from some internal call (which means a bug — e.g. `NaN` in coordinates). No intermediate states since nothing is mutated.
+- **`NaN`/`Infinity` in `position` or `radius`.** The detector does not filter: the comparison `dSq < rSumSq` with `NaN` gives `false`, and the intersection simply won't be registered. This is fail-safe: no false events, but the bug is not masked — the bullet will "pass through" an asteroid, visible immediately in a dev build.
+- **Double-counting a single intersection.** Excluded by loop structure: each pair is checked exactly once, `(a, b)` order normalised by the `kind` table.
+- **Event after resolution of another event from the same batch.** Example: a bullet hit asteroid `A`; the same tick — the bullet hits asteroid `B`; after resolving the first event the bullet is already `alive = false`, but the `B` event is already in the array. Protection — in `World.resolveCollisions`: skip an event if `!event.a.alive || !event.b.alive`. `detect` itself does not do such filtering (the snapshot is coherent).
+- **Exceptions.** The module does not throw on its own. An error from `distanceSqTorus` is impossible for finite inputs; an error from `Math.*` likewise. Any propagated exception is a caller bug, caught by the game loop's top-level try/catch.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript (ES2022 target).** Язык задан архитектурой. Дискриминированное объединение (`CollisionKind`) и типы-литералы обеспечивают безопасную резолюцию в `World` через `switch (event.kind)` без `instanceof`.
-- **Реализация — чистая функция `detect(world)` или `class CollisionSystem { static detect(world) }`.** Оба варианта эквивалентны, предпочтителен чистый функциональный экспорт: у модуля нет состояния, класс без полей — избыточная обёртка. Если архитектура настаивает на единообразии «каждая подсистема — класс», оформим как класс со статическим методом.
-- **Без внешних библиотек.** Алгоритм — два-три вложенных цикла, арифметика сравнений и torus-distance. Никаких геометрических/физических движков (`matter-js`, `p2`) не требуется.
-- **Без broad-phase структур (quad-tree, spatial hash).** Оправдание: при ожидаемом числе сущностей наивное O(n²) проще, быстрее в абсолютных значениях и не тратит память на поддержание индекса. Если WaveManager в поздних волнах начнёт генерировать сотни астероидов (чего в концепте не заложено), можно будет рассмотреть broad-phase — см. «Открытые вопросы».
-- **Без пула объектов для `CollisionEvent`.** Массив пересоздаётся на каждом тике; за кадр событий единицы, GC-давление пренебрежимо. Пул событий — преждевременная оптимизация.
+- **TypeScript (ES2022 target).** Language defined by architecture. Discriminated union (`CollisionKind`) and literal types provide safe resolution in `World` via `switch (event.kind)` without `instanceof`.
+- **Implementation — pure function `detect(world)` or `class CollisionSystem { static detect(world) }`.** Both are equivalent; a pure functional export is preferred: the module has no state, a class without fields is redundant wrapping. If the architecture insists on "every subsystem is a class", it will be a class with a static method.
+- **No external libraries.** The algorithm is two or three nested loops, comparison arithmetic, and torus distance. No geometry/physics engines (`matter-js`, `p2`) are needed.
+- **No broad-phase structures (quad-tree, spatial hash).** Justification: with the expected number of entities, naïve O(n²) is simpler, faster in absolute terms, and wastes no memory on index maintenance. If `WaveManager` in later waves generates hundreds of asteroids (which is not in the concept), broad-phase could be considered — see Open Questions.
+- **No object pooling for `CollisionEvent`.** The array is recreated each tick; per-frame events number in single digits, GC pressure is negligible. Event pooling is premature optimisation.
 
-## Конфигурация
+## Configuration
 
-Собственных env-переменных, секретов и рантайм-настроек модуль не имеет. Извне читаются только константы `CANVAS.WIDTH` и `CANVAS.HEIGHT` из `config` — для torus-distance. Изменение размеров канваса — правка `config.ts` и пересборка бандла.
+The module has no env variables, secrets, or runtime settings. The only externally read constants are `CANVAS.WIDTH` and `CANVAS.HEIGHT` from `config` — for torus distance. Changing canvas dimensions requires editing `config.ts` and rebuilding the bundle.
 
-Внутренних констант у модуля нет: вся «магия» берётся из полей сущностей (`position`, `radius`) и из `config.CANVAS`.
+The module has no internal constants: all "magic" comes from entity fields (`position`, `radius`) and `config.CANVAS`.
 
-## Открытые вопросы
+## Open Questions
 
-- **Куда положить `distanceSqTorus` — в `vec2-math` или оставить приватной в `collision-system`.** Функция полезна только здесь, но концептуально относится к векторной математике. Склоняемся перенести в `vec2-math` как `distanceSqTorus(a, b, width, height)` для консистентности с `distanceSq`; окончательно решится при имплементации.
-- **Учитывать ли torus-distance в принципе или ограничиться прямой евклидовой.** Прямая — на один шаг проще и, строго говоря, ошибается только для пар у противоположных краёв с очень быстро летящими объектами. В оригинальном Asteroids эта проблема была на уровне «редко, но заметно»; для нашей игры лучше сразу делать корректно — иначе игрок получает баг «пуля прошла сквозь астероид у края экрана» в первые минуты игры. Рекомендация — реализовать torus-distance с самого начала.
-- **Форма API: свободная функция `detect(world)` или `class CollisionSystem`.** Обсуждалось в «Стек и библиотеки». Решится при имплементации; пользователь (`GameScene`) импортирует одну сущность в любом случае.
-- **Как читать неуязвимость корабля.** Напрямую сравнивать `now < ship.invulnUntil` или вызывать `ship.isInvulnerable(now)` / `ship.invulnRemaining > 0` — зависит от финальной схемы в `ship.md`. Детектор получает либо `now` аргументом (`detect(world, now)`), либо спрашивает корабль через хелпер. Склоняемся к последнему: меньше параметров и меньше сцепления с игровым временем.
-- **Нужен ли `kind === 'bulletShipUfo'` или достаточно одного `bulletUfo`.** Сейчас явно разделены пули игрока по целям (`bulletShipAsteroid`, `bulletShipUfo`) — чтобы `World` в резолюции мог по `kind` сразу начислять очки. Альтернатива — один `kind: 'bulletAsteroid' | 'bulletUfo' | 'bulletShip'`, а в резолюции различать по `a.source`. Текущий вариант — явнее, но длиннее перечисление.
-- **Сортировка/приоритизация событий.** Если в одном тике пуля догнала астероид одновременно с тем, как корабль в него влетел, возможна ситуация, когда по порядку обхода сначала обрабатывается `shipAsteroid` (игрок теряет жизнь), потом `bulletShipAsteroid` (астероид всё равно уничтожается, но жизнь уже потеряна). В большинстве случаев это приемлемо; при желании можно ввести приоритет «сначала пули» в сортировке массива перед возвратом. Решение — по результатам плейтеста.
-- **Расширение на будущие сущности.** Если появятся мины, боссы, бонусы — таблица `CollisionKind` расширится. Пока перечисление закрыто пятью видами; добавление новых пар потребует точечной правки `detect` и консьюмера в `World`.
+- **Where to put `distanceSqTorus` — in `vec2-math` or keep it private in `collision-system`.** The function is useful only here, but conceptually belongs to vector math. Leaning toward moving it to `vec2-math` as `distanceSqTorus(a, b, width, height)` for consistency with `distanceSq`; will be decided at implementation time.
+- **Whether to account for torus distance at all or limit to plain Euclidean.** Plain is one step simpler and strictly speaking only errs for pairs near opposite edges with very fast objects. In the original Asteroids this problem was at the level of "rare but noticeable"; for our game it is better to do it correctly from the start — otherwise the player gets the bug "bullet passed through an asteroid at the screen edge" in the first minutes of play. Recommendation — implement torus distance from the start.
+- **API form: free function `detect(world)` or `class CollisionSystem`.** Discussed in Stack & Libraries. Will be decided at implementation; the consumer (`GameScene`) imports one entity in either case.
+- **How to read ship invulnerability.** Compare `now < ship.invulnUntil` directly or call `ship.isInvulnerable(now)` / `ship.invulnRemaining > 0` — depends on the final scheme in `ship.md`. The detector either receives `now` as an argument (`detect(world, now)`) or asks the ship via a helper. Leaning toward the latter: fewer parameters and less coupling to game time.
+- **Whether `kind === 'bulletShipUfo'` is needed or one `bulletUfo` suffices.** Currently player bullets are explicitly separated by target (`bulletShipAsteroid`, `bulletShipUfo`) — so `World` can award points directly by `kind` in resolution. Alternative — one `kind: 'bulletAsteroid' | 'bulletUfo' | 'bulletShip'`, distinguishing by `a.source` in resolution. The current variant is more explicit but has a longer enumeration.
+- **Sorting/prioritising events.** If in one tick a bullet caught an asteroid at the same moment the ship flew into it, a scenario is possible where `shipAsteroid` is processed first (player loses a life) and then `bulletShipAsteroid` (asteroid is still destroyed but the life is already gone). In most cases this is acceptable; if desired, a priority "bullets first" could be introduced by sorting the array before returning. Decision — after play-testing.
+- **Extension to future entities.** If mines, bosses, or bonuses are added — the `CollisionKind` table expands. For now the enumeration is closed at five kinds; adding new pairs requires targeted changes to `detect` and its consumer in `World`.

@@ -1,135 +1,135 @@
-# Модуль `ufo`
+# Module `ufo`
 
-## Назначение
+## Purpose
 
-Модуль определяет класс `Ufo extends Entity` — НЛО-противника, периодически появляющегося на игровом поле и стреляющего по кораблю игрока. Существует в двух подтипах (`large` и `small`), различающихся размером, скоростью и точностью прицеливания. Без этого модуля в игре отсутствует второй источник опасности (помимо астероидов) и теряется вторая ключевая механика оригинального Asteroids — «охота» НЛО на игрока.
+The module defines the `Ufo extends Entity` class — the UFO enemy that periodically appears on the field and fires at the player's ship. It exists in two subtypes (`large` and `small`), differing in size, speed, and aiming accuracy. Without this module the game lacks the second source of danger (besides asteroids) and loses the second key mechanic of the original Asteroids — the UFO "hunting" the player.
 
-## Ответственности
+## Responsibilities
 
-- Объявление класса `Ufo extends Entity` с конкретной реализацией `update(dt, shipPos)` и `draw(ctx)`.
-- Хранение подтипа (`kind: 'large' | 'small'`) и связанных таймеров поведения (`directionTimer`, `fireTimer`).
-- Выбор стартовой позиции и направления полёта: появление на левом или правом краю канваса на случайной высоте, горизонтальная скорость со знаком в сторону противоположного края.
-- Периодическая корректировка вертикальной составляющей скорости: по истечении `directionTimer` — случайное изменение `velocity.y`, перезапуск таймера.
-- Периодический выстрел в направлении корабля игрока с учётом точности подтипа: по истечении `fireTimer` — возврат готовой к добавлению в мир `Bullet`, перезапуск таймера.
-- Специфическое «движение без wrap по X»: если НЛО вышел за левый или правый край — считается «улетевшим», `alive = false`; wrap по оси Y сохраняется.
-- Отрисовка векторного силуэта НЛО линиями (купол + корпус) с пропорциями, зависящими от `kind`.
+- Declaring the `Ufo extends Entity` class with a concrete `update(dt, shipPos)` and `draw(ctx)` implementation.
+- Storing the subtype (`kind: 'large' | 'small'`) and associated behaviour timers (`directionTimer`, `fireTimer`).
+- Choosing the starting position and flight direction: appearing at the left or right edge of the canvas at a random height, with horizontal velocity pointing toward the opposite edge.
+- Periodically adjusting the vertical velocity component: when `directionTimer` expires — random change to `velocity.y`, timer restart.
+- Periodic firing toward the player's ship with accuracy depending on the subtype: when `fireTimer` expires — returning a `Bullet` ready to be added to the world, timer restart.
+- Specific "movement without X wrap-around": if the UFO goes beyond the left or right edge — it is considered "flown off", `alive = false`; Y wrap-around is preserved.
+- Rendering the vector UFO silhouette with lines (dome + body) with proportions depending on `kind`.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не решает, когда и с какой вероятностью спавнить НЛО — это зона `WaveManager.maybeSpawnUfo`.
-- Не добавляет созданные пули в `World` и не уведомляет `CollisionSystem`: `tryFire` лишь возвращает `Bullet`, дальнейшая маршрутизация — задача `GameScene`/`World`.
-- Не начисляет очки за собственную смерть — это делает `Scoring` по событию `CollisionEvent { kind: 'bulletUfo' }`.
-- Не проверяет коллизии с кораблём, пулями и астероидами — это `CollisionSystem`.
-- Не знает про состояние игры (волны, счёт, жизни) и не читает ввод игрока.
-- Не содержит логики эффектов взрыва — частицы создаёт `World` при разрешении коллизии.
+- Does not decide when and with what probability to spawn a UFO — that is `WaveManager.maybeSpawnUfo`'s domain.
+- Does not add created bullets to `World` and does not notify `CollisionSystem`: `tryFire` only returns a `Bullet`; further routing is `GameScene`/`World`'s responsibility.
+- Does not award points for its own death — `Scoring` handles that based on the `CollisionEvent { kind: 'bulletUfo' }` event.
+- Does not check collisions with the ship, bullets, or asteroids — that is `CollisionSystem`.
+- Does not know about game state (waves, score, lives) and does not read player input.
+- Contains no explosion effect logic — particles are created by `World` when resolving a collision.
 
-## Публичный интерфейс
+## Public Interface
 
-Единственный экспорт — класс:
+The sole export is the class:
 
-- `class Ufo extends Entity` — НЛО-противник.
+- `class Ufo extends Entity` — the UFO enemy.
 
-Поля экземпляра (в дополнение к унаследованным `position`, `velocity`, `radius`, `alive`):
+Instance fields (beyond inherited `position`, `velocity`, `radius`, `alive`):
 
-- `kind: 'large' | 'small'` — подтип, влияет на радиус, скорость, точность, пропорции силуэта и очки.
-- `directionTimer: number` — секунды до следующей случайной корректировки `velocity.y`.
-- `fireTimer: number` — секунды до следующего выстрела.
+- `kind: 'large' | 'small'` — subtype, affecting radius, speed, accuracy, silhouette proportions, and score value.
+- `directionTimer: number` — seconds until the next random adjustment of `velocity.y`.
+- `fireTimer: number` — seconds until the next shot.
 
-Конструктор:
+Constructor:
 
-- `constructor(kind: 'large' | 'small')` — создаёт НЛО с параметрами, взятыми из `UFO` (`config`). Случайно выбирает сторону появления (левая или правая кромка канваса), случайную `y ∈ [0, CANVAS.HEIGHT)`, направление по X — к противоположному краю, модуль скорости — `UFO.SPEED[kind]`. Стартовый `velocity.y` — нулевой или малое случайное значение. Таймеры инициализируются значениями около `UFO.DIRECTION_CHANGE_INTERVAL` и `UFO.FIRE_INTERVAL` (с небольшим случайным джиттером, чтобы разные НЛО не синхронизировались).
+- `constructor(kind: 'large' | 'small')` — creates a UFO with parameters taken from `UFO` (`config`). Randomly chooses the spawn side (left or right edge of the canvas), a random `y ∈ [0, CANVAS.HEIGHT)`, the X direction toward the opposite edge, and speed magnitude `UFO.SPEED[kind]`. The initial `velocity.y` is zero or a small random value. Timers are initialised near `UFO.DIRECTION_CHANGE_INTERVAL` and `UFO.FIRE_INTERVAL` (with small random jitter so different UFOs don't synchronise).
 
-Методы:
+Methods:
 
-- `update(dt: number, shipPos: Vec2 | null): void` — основной шаг симуляции. Уменьшает `directionTimer` и `fireTimer`; по срабатыванию `directionTimer` — меняет `velocity.y` и перезапускает таймер; продвигает позицию через интеграцию (см. «Ключевые потоки»); проверяет выход за горизонтальные границы канваса и выставляет `alive = false`, если НЛО улетел.
-- `tryFire(shipPos: Vec2 | null): Bullet | null` — проверяет `fireTimer`; если он ≤ 0 и `shipPos !== null`, конструирует `Bullet` в направлении корабля с учётом разброса, перезапускает `fireTimer` и возвращает пулю. Иначе — возвращает `null`. Таймер уменьшается в `update`, а не здесь.
-- `draw(ctx: CanvasRenderingContext2D): void` — рисует силуэт НЛО: горизонтальный эллиптический «корпус» (нижняя часть) и полукруглый «купол» сверху, соединённые линиями; пропорции масштабируются по `UFO.RADIUS[kind]`.
+- `update(dt: number, shipPos: Vec2 | null): void` — main simulation step. Decrements `directionTimer` and `fireTimer`; when `directionTimer` fires — changes `velocity.y` and restarts the timer; advances position via integration (see Key Flows); checks for exit past horizontal canvas bounds and sets `alive = false` if the UFO has flown off.
+- `tryFire(shipPos: Vec2 | null): Bullet | null` — checks `fireTimer`; if it is ≤ 0 and `shipPos !== null`, constructs a `Bullet` aimed at the ship with the appropriate spread, restarts `fireTimer`, and returns the bullet. Otherwise — returns `null`. The timer is decremented in `update`, not here.
+- `draw(ctx: CanvasRenderingContext2D): void` — draws the UFO silhouette: a horizontal elliptical "body" (lower part) and a semi-circular "dome" on top, connected by lines; proportions are scaled by `UFO.RADIUS[kind]`.
 
-## Модель данных
+## Data Model
 
-Модуль не владеет коллекциями; описывает форму одного экземпляра в памяти.
+The module owns no collections; it describes the shape of one instance in memory.
 
-**Поля `Ufo` (помимо унаследованных от `Entity`):**
+**`Ufo` fields (beyond those inherited from `Entity`):**
 
-| Поле | Тип | Значение по умолчанию | Назначение |
+| Field | Type | Default | Purpose |
 |---|---|---|---|
-| `kind` | `'large' \| 'small'` | из конструктора | подтип НЛО, определяет все параметры баланса |
-| `directionTimer` | `number` | `UFO.DIRECTION_CHANGE_INTERVAL` ± джиттер | секунды до следующей смены `velocity.y` |
-| `fireTimer` | `number` | `UFO.FIRE_INTERVAL` ± джиттер | секунды до следующего выстрела |
+| `kind` | `'large' \| 'small'` | from constructor | UFO subtype, determines all balance parameters |
+| `directionTimer` | `number` | `UFO.DIRECTION_CHANGE_INTERVAL` ± jitter | seconds until the next `velocity.y` change |
+| `fireTimer` | `number` | `UFO.FIRE_INTERVAL` ± jitter | seconds until the next shot |
 
-**Производные параметры, читаемые из `config`:**
+**Derived parameters, read from `config`:**
 
-- `radius = UFO.RADIUS[kind]` — задаётся в конструкторе через `super(...)`.
-- скорость `|velocity.x| = UFO.SPEED[kind]` — задаётся в конструкторе.
-- точность прицеливания — `UFO.LARGE_AIM_ACCURACY` или `UFO.SMALL_AIM_ACCURACY`, используется в `tryFire`.
+- `radius = UFO.RADIUS[kind]` — set in the constructor via `super(...)`.
+- speed `|velocity.x| = UFO.SPEED[kind]` — set in the constructor.
+- aiming accuracy — `UFO.LARGE_AIM_ACCURACY` or `UFO.SMALL_AIM_ACCURACY`, used in `tryFire`.
 
-**Связи.** Нет прямых ссылок на другие сущности. `Ufo` на каждом тике получает `shipPos` как аргумент — это единственная связь с кораблём и она однонаправленная (НЛО читает позицию, не знает про сам объект `Ship`). В `tryFire` возвращённая `Bullet` отдаётся по значению вызывающему — ссылок между `Ufo` и своей пулей не остаётся.
+**Relations.** No direct references to other entities. `Ufo` receives `shipPos` as an argument each tick — the only connection to the ship, and it is one-directional (the UFO reads the position, knows nothing about the `Ship` object itself). In `tryFire`, the returned `Bullet` is passed by value to the caller — no references remain between the `Ufo` and its bullet.
 
-## Ключевые потоки
+## Key Flows
 
-**Инициализация и старт полёта.** `WaveManager.maybeSpawnUfo` решает, что пора добавить НЛО, и создаёт `new Ufo(kind)`. Конструктор случайно выбирает сторону появления: `side = randomBool() ? 'left' : 'right'`; `position.x = side === 'left' ? 0 : CANVAS.WIDTH`; `position.y = randomRange(0, CANVAS.HEIGHT)`. `velocity.x = side === 'left' ? +UFO.SPEED[kind] : -UFO.SPEED[kind]`, `velocity.y = randomRange(-UFO.SPEED[kind] * 0.25, +UFO.SPEED[kind] * 0.25)` (малый начальный вертикальный компонент). Таймеры ставятся в `UFO.DIRECTION_CHANGE_INTERVAL` и `UFO.FIRE_INTERVAL` с небольшим случайным джиттером. `World.ufos.push(ufo)`.
+**Initialisation and flight start.** `WaveManager.maybeSpawnUfo` decides it is time to add a UFO and creates `new Ufo(kind)`. The constructor randomly chooses the spawn side: `side = randomBool() ? 'left' : 'right'`; `position.x = side === 'left' ? 0 : CANVAS.WIDTH`; `position.y = randomRange(0, CANVAS.HEIGHT)`. `velocity.x = side === 'left' ? +UFO.SPEED[kind] : -UFO.SPEED[kind]`, `velocity.y = randomRange(-UFO.SPEED[kind] * 0.25, +UFO.SPEED[kind] * 0.25)` (small initial vertical component). Timers are set to `UFO.DIRECTION_CHANGE_INTERVAL` and `UFO.FIRE_INTERVAL` with small random jitter. `World.ufos.push(ufo)`.
 
-**Тик `update(dt, shipPos)`.** Последовательно:
+**`update(dt, shipPos)` tick.** Sequentially:
 
-1. `this.directionTimer -= dt`. Если `≤ 0` — генерируется новое значение `velocity.y = randomRange(-UFO.SPEED[kind] * 0.5, +UFO.SPEED[kind] * 0.5)`, `this.directionTimer = UFO.DIRECTION_CHANGE_INTERVAL + jitter`. `velocity.x` не меняется (НЛО всегда движется к противоположному краю).
-2. `this.fireTimer -= dt` — таймер прицеливания идёт непрерывно; сам выстрел инициируется отдельным вызовом `tryFire` из `GameScene` (см. следующий поток).
-3. Обновление позиции — ручное, без вызова базового `integrate`, потому что стандартный `integrate` делает wrap по обеим осям, а нам нужен wrap только по Y: `this.position = { x: this.position.x + this.velocity.x * dt, y: wrap(this.position.y + this.velocity.y * dt, CANVAS.HEIGHT) }`.
-4. Проверка выхода за горизонтальные границы: если `position.x < 0` или `position.x > CANVAS.WIDTH` — `this.alive = false`. НЛО считается «улетевшим», `World` удалит его при ближайшей зачистке списков. Очки за улетевший НЛО не начисляются.
+1. `this.directionTimer -= dt`. If `≤ 0` — a new value `velocity.y = randomRange(-UFO.SPEED[kind] * 0.5, +UFO.SPEED[kind] * 0.5)` is generated, `this.directionTimer = UFO.DIRECTION_CHANGE_INTERVAL + jitter`. `velocity.x` is not changed (the UFO always moves toward the opposite edge).
+2. `this.fireTimer -= dt` — the targeting timer decrements continuously; the actual shot is initiated by a separate `tryFire` call from `GameScene` (see next flow).
+3. Position update — done manually, without calling the base `integrate`, because the standard `integrate` wraps on both axes, but we need wrapping only on Y: `this.position = { x: this.position.x + this.velocity.x * dt, y: wrap(this.position.y + this.velocity.y * dt, CANVAS.HEIGHT) }`.
+4. Check for exit past horizontal bounds: if `position.x < 0` or `position.x > CANVAS.WIDTH` — `this.alive = false`. The UFO is considered "flown off"; `World` will remove it at the next list cleanup. No points are awarded for a flown-off UFO.
 
-**Попытка выстрела через `tryFire(shipPos)`.** `GameScene` после `update` всех сущностей проходит по `world.ufos` и для каждого вызывает `ufo.tryFire(world.ship?.position ?? null)`. Внутри: если `this.fireTimer > 0` — возврат `null`. Если `shipPos === null` (корабль мёртв, идёт пауза между респаунами) — выстрел отменяется, `fireTimer` не перезапускается (следующий тик попробует снова; как только корабль появится, НЛО начнёт стрелять). Иначе — вычисляется идеальное направление `dir = normalize(sub(shipPos, this.position))`, к углу направления добавляется случайное отклонение, обратно пропорциональное точности: `accuracy = UFO[kind === 'small' ? 'SMALL_AIM_ACCURACY' : 'LARGE_AIM_ACCURACY']`; `aimJitter = randomRange(-1, 1) * (1 - accuracy) * maxSpread` (где `maxSpread` — константа модуля или часть `UFO`-конфига, например `π/4` для large). Итоговое направление — `rotate(dir, aimJitter)`. Создаётся `new Bullet({ position: this.position, velocity: scale(aimedDir, BULLET.SPEED), source: 'ufo' })`, `this.fireTimer = UFO.FIRE_INTERVAL + jitter`, пуля возвращается. `GameScene` добавляет её в `world.bullets`.
+**Firing attempt via `tryFire(shipPos)`.** `GameScene` after updating all entities iterates `world.ufos` and calls `ufo.tryFire(world.ship?.position ?? null)` for each. Internally: if `this.fireTimer > 0` — return `null`. If `shipPos === null` (ship is dead, between respawns) — the shot is cancelled, `fireTimer` is not restarted (the next tick will try again; as soon as the ship appears, the UFO will fire). Otherwise — the ideal direction `dir = normalize(sub(shipPos, this.position))` is computed, and a random deviation inversely proportional to accuracy is added to the angle: `accuracy = UFO[kind === 'small' ? 'SMALL_AIM_ACCURACY' : 'LARGE_AIM_ACCURACY']`; `aimJitter = randomRange(-1, 1) * (1 - accuracy) * maxSpread` (where `maxSpread` is a module constant or part of the `UFO` config, e.g. `π/4` for large). The resulting direction is `rotate(dir, aimJitter)`. A `new Bullet({ position: this.position, velocity: scale(aimedDir, BULLET.SPEED), source: 'ufo' })` is created, `this.fireTimer = UFO.FIRE_INTERVAL + jitter` is set, the bullet is returned. `GameScene` adds it to `world.bullets`.
 
-**Отрисовка.** `draw(ctx)` использует `ctx.beginPath` / `ctx.stroke` c координатами, смещёнными относительно `position`. Рисуется: (1) горизонтальная эллиптическая «тарелка» — две дуги или замкнутая ломаная; (2) верхний полукруглый «купол»; (3) тонкие линии-«ободок» между куполом и корпусом. Все геометрические размеры масштабируются от `radius` (который для `large` равен `UFO.RADIUS.large`, для `small` — `UFO.RADIUS.small`), так что `small` выглядит мельче и пропорционально аккуратнее.
+**Rendering.** `draw(ctx)` uses `ctx.beginPath` / `ctx.stroke` with coordinates offset relative to `position`. Drawn: (1) a horizontal elliptical "saucer" — two arcs or a closed polyline; (2) the upper semi-circular "dome"; (3) thin "rim" lines between the dome and body. All geometric sizes are scaled from `radius` (`UFO.RADIUS.large` for `large`, `UFO.RADIUS.small` for `small`), so `small` looks smaller and proportionally more precise.
 
-## Зависимости
+## Dependencies
 
-- **`entity`** — наследование от `Entity`: `position`, `velocity`, `radius`, `alive`, сигнатуры `update`/`draw`. Базовый `integrate` в `Ufo` намеренно не используется (см. обоснование в «Ключевые потоки»).
-- **`vec2-math`** — `Vec2`, `add`, `sub`, `scale`, `normalize`, `rotate`, `wrap`, `randomRange`. Используются в конструкторе, в `update` (ручное обновление с wrap только по Y) и в `tryFire` (прицеливание).
-- **`config`** — `CANVAS.WIDTH`, `CANVAS.HEIGHT`, группа `UFO` (`RADIUS`, `SPEED`, `DIRECTION_CHANGE_INTERVAL`, `FIRE_INTERVAL`, `SMALL_AIM_ACCURACY`, `LARGE_AIM_ACCURACY`), `BULLET.SPEED` (для скорости выпускаемой пули).
-- **`bullet`** — конструктор `Bullet` с `source: 'ufo'`; результат возвращается из `tryFire`.
-- **Стандартный DOM (`CanvasRenderingContext2D`)** — только как тип параметра `draw(ctx)`.
+- **`entity`** — inheritance from `Entity`: `position`, `velocity`, `radius`, `alive`, `update`/`draw` signatures. The base `integrate` is intentionally not used in `Ufo` (see Key Flows rationale).
+- **`vec2-math`** — `Vec2`, `add`, `sub`, `scale`, `normalize`, `rotate`, `wrap`, `randomRange`. Used in the constructor, in `update` (manual update with Y-only wrap), and in `tryFire` (aiming).
+- **`config`** — `CANVAS.WIDTH`, `CANVAS.HEIGHT`, the `UFO` group (`RADIUS`, `SPEED`, `DIRECTION_CHANGE_INTERVAL`, `FIRE_INTERVAL`, `SMALL_AIM_ACCURACY`, `LARGE_AIM_ACCURACY`), `BULLET.SPEED` (for the speed of the fired bullet).
+- **`bullet`** — the `Bullet` constructor with `source: 'ufo'`; the result is returned from `tryFire`.
+- **Standard DOM (`CanvasRenderingContext2D`)** — only as the type parameter for `draw(ctx)`.
 
-Обратные зависимости (кто импортирует `Ufo`): `WaveManager` (спавн), `GameScene`/`World` (хранение в списке, вызов `update`/`tryFire`/`draw`), `CollisionSystem` (тип в парах столкновений).
+Reverse dependencies (who imports `Ufo`): `WaveManager` (spawn), `GameScene`/`World` (storing in the list, calling `update`/`tryFire`/`draw`), `CollisionSystem` (type in collision pairs).
 
-## Обработка ошибок
+## Error Handling
 
-- **`shipPos === null` (корабль мёртв между респаунами).** Выбор из документа: **выстрел отменяется**, `fireTimer` не перезапускается и не сбрасывается. Обоснование: стрелять в случайном направлении при отсутствии цели — антиигрово (игрок в этот момент не контролирует корабль и «подарок» в виде пули, прилетевшей в респаун-точку, воспринимается как нечестный). Отмена с сохранением таймера означает: как только корабль возродится, НЛО выстрелит при следующем тике, где `fireTimer` уже истёк, — задержки не появится.
-- **НЛО вылетел за границу по X.** Штатное поведение, не ошибка: выставляется `alive = false`, `World` удалит объект. Очки не начисляются (игрок не уничтожил НЛО), что соответствует канону.
-- **Некорректный `kind` в конструкторе.** Запрещено типом (`'large' | 'small'`), рантайм-проверок нет. Обращение к `UFO.RADIUS[kind]` при «левом» значении даст `undefined` и последующий `NaN` в позиции — fail-fast, видно сразу.
-- **`shipPos === position` (нулевой вектор после `sub`).** Маловероятный сценарий (НЛО стоит в той же точке, что и корабль), но возможен при их столкновении до обработки коллизии. `normalize(ZERO)` по контракту `vec2-math` вернёт `ZERO`; пуля полетит с нулевой скоростью и мгновенно «сгорит» по TTL или сразу приведёт к столкновению. Это допустимый граничный случай — специально не обрабатывается.
-- **Исключение в `update`/`draw`.** `Ufo` ничего не ловит; пробрасывается вверх до верхнеуровневого try/catch игрового цикла (см. `architecture.md`).
-- **Downstream failure / partial success** — неприменимо: синхронный код без I/O.
+- **`shipPos === null` (ship dead between respawns).** Decision from the document: **shot is cancelled**, `fireTimer` is neither restarted nor reset. Rationale: firing in a random direction when there is no target is anti-game (the player has no control over the ship at this moment, and a bullet arriving at the respawn point feels unfair). Cancelling with the timer intact means: as soon as the ship respawns, the UFO will fire on the next tick where `fireTimer` has already expired — no delay introduced.
+- **UFO flew off past the X boundary.** Normal behaviour, not an error: `alive = false` is set, `World` removes the object. No points are awarded (the player did not destroy the UFO), consistent with canon.
+- **Invalid `kind` in the constructor.** Forbidden by type (`'large' | 'small'`), no runtime checks. Accessing `UFO.RADIUS[kind]` with an unknown value will yield `undefined` and subsequent `NaN` in position — fail-fast, immediately visible.
+- **`shipPos === position` (zero vector after `sub`).** Unlikely scenario (UFO is at the exact same point as the ship), but possible during a collision before resolution. `normalize(ZERO)` per the `vec2-math` contract returns `ZERO`; the bullet will fly with zero velocity and immediately "burn out" by TTL or trigger a collision instantly. This is an acceptable edge case — not specially handled.
+- **Exception in `update`/`draw`.** `Ufo` catches nothing; propagates up to the game loop's top-level try/catch (see `architecture.md`).
+- **Downstream failure / partial success** — not applicable: synchronous code with no I/O.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript class, наследование от `Entity`.** Согласуется с архитектурным решением «классический ООП, общий базовый класс». Никаких стейт-машин, AI-фреймворков или поведения деревьев — логика НЛО укладывается в два таймера и условное ветвление.
-- **Без внешних библиотек.** Всё строится на `vec2-math`, `config`, `entity`, `bullet`. Поведение НЛО элементарное (линейное движение + случайная корректировка + прицельный выстрел), полноценный AI избыточен.
-- **`update` с дополнительным аргументом `shipPos`** — намеренное отклонение от чистой сигнатуры `update(dt)` базового `Entity`. Альтернатива (хранить ссылку на корабль в полях `Ufo`) хуже: создаёт жёсткую связь между сущностями и усложняет удаление корабля. Расширенная сигнатура явно говорит, что НЛО — не вполне «самодостаточная» сущность и нуждается в таргете извне. Возможно стоит оформить это как отдельный интерфейс-метод `updateWithTarget(dt, target)` — см. «Открытые вопросы».
-- **Отрисовка через прямые вызовы `ctx.moveTo` / `ctx.lineTo` / `ctx.arc`**, без хелпера `Renderer.polyline` — силуэт состоит из дуг и линий, лобовое API канваса проще.
+- **TypeScript class, inheritance from `Entity`.** Consistent with the architectural decision "classic OOP, common base class". No state machines, AI frameworks, or behaviour trees — the UFO logic fits in two timers and conditional branching.
+- **No external libraries.** Everything is built on `vec2-math`, `config`, `entity`, `bullet`. The UFO behaviour is elementary (linear movement + random adjustment + aimed shot); a full AI is excessive.
+- **`update` with an extra argument `shipPos`** — a deliberate deviation from the clean `update(dt)` base `Entity` signature. Alternative (storing a ship reference in `Ufo` fields) is worse: creates a hard coupling between entities and complicates ship removal. The extended signature explicitly signals that the UFO is not a fully "self-contained" entity and needs an external target. Possibly worth formalising as a separate interface method `updateWithTarget(dt, target)` — see Open Questions.
+- **Rendering via direct `ctx.moveTo` / `ctx.lineTo` / `ctx.arc` calls**, without the `Renderer.polyline` helper — the silhouette consists of arcs and lines; the raw Canvas API is simpler here.
 
-## Конфигурация
+## Configuration
 
-Собственных env-переменных и секретов модуль не имеет. Все числовые параметры читаются из `config.UFO`:
+The module has no env variables or secrets. All numeric parameters are read from `config.UFO`:
 
-| Имя | Назначение | Значение по умолчанию |
+| Name | Purpose | Default |
 |---|---|---|
-| `UFO.RADIUS.large` | радиус коллизии крупного НЛО | `20` |
-| `UFO.RADIUS.small` | радиус коллизии мелкого НЛО | `10` |
-| `UFO.SPEED.large` | модуль горизонтальной скорости крупного НЛО, px/s | `120` |
-| `UFO.SPEED.small` | модуль скорости мелкого НЛО, px/s | `160` |
-| `UFO.DIRECTION_CHANGE_INTERVAL` | средний интервал смены `velocity.y`, с | `1.5` |
-| `UFO.FIRE_INTERVAL` | средний интервал между выстрелами, с | `1.2` |
-| `UFO.LARGE_AIM_ACCURACY` | точность прицеливания крупного НЛО (0..1) | `0.3` |
-| `UFO.SMALL_AIM_ACCURACY` | точность мелкого НЛО (0..1) | `0.9` |
-| `BULLET.SPEED` | скорость выпускаемой пули, px/s | `600` |
-| `CANVAS.WIDTH`, `CANVAS.HEIGHT` | размеры канваса для спавна и wrap по Y | `960`, `720` |
+| `UFO.RADIUS.large` | large UFO collision radius | `20` |
+| `UFO.RADIUS.small` | small UFO collision radius | `10` |
+| `UFO.SPEED.large` | large UFO horizontal speed magnitude, px/s | `120` |
+| `UFO.SPEED.small` | small UFO speed magnitude, px/s | `160` |
+| `UFO.DIRECTION_CHANGE_INTERVAL` | average `velocity.y` change interval, s | `1.5` |
+| `UFO.FIRE_INTERVAL` | average interval between shots, s | `1.2` |
+| `UFO.LARGE_AIM_ACCURACY` | large UFO aiming accuracy (0..1) | `0.3` |
+| `UFO.SMALL_AIM_ACCURACY` | small UFO accuracy (0..1) | `0.9` |
+| `BULLET.SPEED` | fired bullet speed, px/s | `600` |
+| `CANVAS.WIDTH`, `CANVAS.HEIGHT` | canvas dimensions for spawn and Y wrap | `960`, `720` |
 
-Амплитуда джиттера таймеров и максимальный угол разброса (`maxSpread`) — внутренние константы модуля; если окажутся чувствительными для баланса, будут вынесены в `config.UFO`.
+Timer jitter amplitude and maximum spread angle (`maxSpread`) are internal module constants; if they prove sensitive for balance, they will be promoted to `config.UFO`.
 
-## Открытые вопросы
+## Open Questions
 
-- **Раздельные `DIRECTION_CHANGE_INTERVAL` и `FIRE_INTERVAL` по типам.** Мелкий НЛО в каноне агрессивнее и маневреннее; единого значения может не хватить. Совпадает с открытым вопросом в `config.md`.
-- **Куда вынести `maxSpread` разброса прицеливания.** Сейчас предполагается как внутренняя константа `Ufo`; возможно, разумнее положить её в `config.UFO` (например, `AIM_MAX_SPREAD_RAD`).
-- **Расширенная сигнатура `update(dt, shipPos)` против «чистой» `update(dt)` базового `Entity`.** Нарушает принцип единого контракта. Альтернатива — метод `updateWithTarget(dt, target)` плюс пустой `update(dt)` из базового класса; `GameScene` вызывает соответствующий метод для `Ufo` отдельно. Решение — при реализации `World`-цикла.
-- **Нужен ли НЛО поведенческий переход «завидев корабль вблизи — уйти»/«стрелять чаще»** (как в некоторых реализациях Asteroids). Пока нет; добавим, если игра на первой сборке покажется слишком лёгкой.
-- **Звук появления НЛО и «бульканье» во время полёта** — отмечено в концепте как опциональная фича; модуль `ufo` не занимается звуком, но возможен callback в конструкторе/`update` для триггера. Отложено до появления аудио-подсистемы.
-- **Поведение при `shipPos === null`.** Выбрано «отменить выстрел, не трогать таймер». Альтернатива — «стрелять в случайном направлении» (ближе к канону некоторых версий). Оставляем текущий вариант как более честный; пересмотрим после плейтеста.
+- **Separate `DIRECTION_CHANGE_INTERVAL` and `FIRE_INTERVAL` by type.** The small UFO is more aggressive and manoeuvrable in the original; a single value may not be sufficient. Overlaps with the open question in `config.md`.
+- **Where to put `maxSpread` for aiming spread.** Currently assumed to be an internal `Ufo` constant; possibly better placed in `config.UFO` (e.g. `AIM_MAX_SPREAD_RAD`).
+- **Extended `update(dt, shipPos)` signature vs. the "clean" `update(dt)` from the base `Entity`.** Violates the single-contract principle. Alternative — method `updateWithTarget(dt, target)` plus an empty `update(dt)` from the base class; `GameScene` calls the appropriate method for `Ufo` separately. Decision — during `World` loop implementation.
+- **Whether the UFO needs a behavioural transition "on spotting the ship nearby — retreat" / "fire more frequently"** (as in some Asteroids implementations). Not yet; will be added if the game feels too easy on the first build.
+- **UFO spawn sound and "burbling" during flight** — noted in the concept as an optional feature; the `ufo` module does not handle sound, but a callback in the constructor/`update` for triggering is possible. Deferred until an audio subsystem exists.
+- **Behaviour when `shipPos === null`.** Chosen: "cancel the shot, don't touch the timer". Alternative — "fire in a random direction" (closer to canon in some versions). Keeping the current approach as fairer; will revisit after playtesting.

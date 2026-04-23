@@ -1,104 +1,104 @@
-# Модуль — SceneManager
+# Module — SceneManager
 
-## Назначение
+## Purpose
 
-Подсистема управления экранами игры держит стек активных сцен (меню, игра, пауза, game over) и делегирует им работу: обновление, отрисовку и обработку ввода. Без неё переходы между экранами и реализация паузы превратились бы в разветвлённые `if`-ветки в игровом цикле, а «заморозка» картинки под паузой — в ручное копирование состояния. Модуль даёт два примитива: интерфейс `Scene` как универсальный контракт экрана и стек с операциями `push` / `pop` / `replace`, на котором тривиально выражается любой переход, включая модальные оверлеи.
+The game screen management subsystem maintains a stack of active scenes (menu, game, pause, game over) and delegates work to them: updating, rendering, and handling input. Without it, transitions between screens and implementing pause would turn into branching `if`-chains in the game loop, and "freezing" the picture under a pause overlay would require manual state copying. The module provides two primitives: the `Scene` interface as a universal screen contract, and a stack with `push` / `pop` / `replace` operations that trivially express any transition, including modal overlays.
 
-## Ответственности
+## Responsibilities
 
-- Хранение стека сцен `Scene[]` и поддержание инварианта «верхняя сцена — активная».
-- Операции над стеком: `push(scene)`, `pop()`, `replace(scene)` с вызовом правильных lifecycle-хуков у затронутых сцен.
-- Делегирование `update(dt, input)` ровно одной — верхней — сцене.
-- Делегирование `draw(ctx)` верхней сцене; опционально — предварительная отрисовка нижней сцены, если верхняя имеет флаг `drawBelow = true` (паттерн модального оверлея для `PauseScene`).
-- Вызов `enter()` при появлении сцены на вершине стека в результате `push` / `replace`.
-- Вызов `exit()` при удалении сцены со стека (через `pop` или `replace`).
-- Вызов `handleResume()` у сцены, оказавшейся на вершине после `pop`, — чтобы она могла сбросить свои временные состояния (например, снять пометку «зажата клавиша паузы», чтобы не сработать повторно).
-- Защита от вырожденных операций: `pop` у пустого стека — no-op, возвращает `null`; `current()` у пустого стека возвращает `null`.
+- Holding the scene stack `Scene[]` and maintaining the invariant "the top scene is the active one".
+- Stack operations: `push(scene)`, `pop()`, `replace(scene)` with correct lifecycle hook calls on affected scenes.
+- Delegating `update(dt, input)` to exactly one — the top — scene.
+- Delegating `draw(ctx)` to the top scene; optionally pre-rendering the scene below if the top scene has the `drawBelow = true` flag (modal overlay pattern for `PauseScene`).
+- Calling `enter()` when a scene appears at the top of the stack as a result of `push` / `replace`.
+- Calling `exit()` when a scene is removed from the stack (via `pop` or `replace`).
+- Calling `handleResume()` on the scene that ends up at the top after a `pop` — so it can reset its transient states (e.g. clear the "pause key held" marker to prevent re-triggering).
+- Protection against degenerate operations: `pop` on an empty stack — no-op, returns `null`; `current()` on an empty stack returns `null`.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не знает про игровые сущности, физику, коллизии — это область `GameScene` / `World`.
-- Не владеет ни `InputSystem`, ни `CanvasRenderingContext2D` — получает их как параметры `update` / `draw` извне.
-- Не реализует сами сцены (`MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`) — только контракт `Scene` и стек.
-- Не управляет игровым циклом (`requestAnimationFrame`, аккумулятор времени) — это `GameLoop`, который дергает `SceneManager.update` / `draw`.
-- Не делает переходов с анимацией (fade in/out) — переключения мгновенные.
-- Не сохраняет/восстанавливает состояние сцен при их удалении — `pop` означает, что сцена выброшена, её состояние потеряно.
-- Не знает о паузе как о концепте: пауза — это просто `push(new PauseScene())` снаружи, для `SceneManager` это обычный push модальной сцены.
+- Does not know about game entities, physics, or collisions — that is `GameScene` / `World`'s domain.
+- Does not own either `InputSystem` or `CanvasRenderingContext2D` — receives them as parameters to `update` / `draw` from the outside.
+- Does not implement the scenes themselves (`MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`) — only the `Scene` contract and the stack.
+- Does not manage the game loop (`requestAnimationFrame`, time accumulator) — that is `GameLoop`, which calls `SceneManager.update` / `draw`.
+- Does not perform transitions with animations (fade in/out) — switches are immediate.
+- Does not save/restore scene state on removal — `pop` means the scene is discarded and its state is lost.
+- Does not know about pause as a concept: a pause is simply `push(new PauseScene())` from the outside; for `SceneManager` that is an ordinary push of a modal scene.
 
-## Публичный интерфейс
+## Public Interface
 
-- `interface Scene` — контракт любой сцены, реализуется `MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`.
-  - `enter(): void` — вызывается единожды, когда сцена впервые оказалась на вершине стека (при `push` или `replace`).
-  - `exit(): void` — вызывается единожды, когда сцена покидает стек (при `pop` или `replace`).
-  - `update(dt: number, input: InputSystem): void` — тик симуляции, `dt` в секундах.
-  - `draw(ctx: CanvasRenderingContext2D): void` — отрисовка кадра.
-  - `handleResume?(): void` — опциональный хук, вызывается, когда сцена снова оказалась на вершине после `pop` верхней сцены. Место для сброса «одноразовых» состояний (флаги, таймеры), которые могли протухнуть за время заморозки.
-  - `drawBelow?: boolean` — опциональный флаг. Если `true`, `SceneManager` сначала отрисует сцену, лежащую непосредственно под этой, а затем — эту. Используется `PauseScene`, чтобы заморозить картинку `GameScene` под полупрозрачным оверлеем. По умолчанию — `false`: рисуется только верхняя сцена.
+- `interface Scene` — the contract for any scene, implemented by `MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`.
+  - `enter(): void` — called once when the scene first appears at the top of the stack (on `push` or `replace`).
+  - `exit(): void` — called once when the scene leaves the stack (on `pop` or `replace`).
+  - `update(dt: number, input: InputSystem): void` — simulation tick, `dt` in seconds.
+  - `draw(ctx: CanvasRenderingContext2D): void` — frame rendering.
+  - `handleResume?(): void` — optional hook, called when the scene is again at the top after a `pop` of the scene above it. The place to reset "one-shot" states (flags, timers) that may have gone stale during the freeze.
+  - `drawBelow?: boolean` — optional flag. If `true`, `SceneManager` first renders the scene immediately below this one, then renders this one on top. Used by `PauseScene` to freeze the `GameScene` picture under a semi-transparent overlay. Defaults to `false`: only the top scene is drawn.
 
-- `class SceneManager` — держит стек и реализует операции над ним.
-  - `push(scene: Scene): void` — кладёт сцену на вершину. `enter()` новой сцены вызывается; `exit()` у старой вершины **не** вызывается (она заморожена, может быть возвращена `pop`-ом).
-  - `pop(): Scene | null` — снимает верхнюю сцену. Вызывает `exit()` у снятой; вызывает `handleResume()` у новой вершины, если у неё есть такой метод. Возвращает снятую сцену; если стек был пуст — возвращает `null` и ничего не делает.
-  - `replace(scene: Scene): void` — заменяет верхнюю сцену новой. У старой вершины вызывается `exit()`, она удаляется; новая кладётся на вершину, у неё вызывается `enter()`. Если стек был пуст — эквивалентно `push(scene)`.
-  - `current(): Scene | null` — верхняя сцена или `null`, если стек пуст.
-  - `update(dt: number, input: InputSystem): void` — делегирует `update(dt, input)` верхней сцене; если стек пуст — no-op.
-  - `draw(ctx: CanvasRenderingContext2D): void` — рисует верхнюю сцену. Если у верхней `drawBelow === true`, сначала рисует сцену, лежащую под ней (на один уровень глубже), затем — верхнюю. Если стек пуст — no-op.
+- `class SceneManager` — holds the stack and implements operations on it.
+  - `push(scene: Scene): void` — places a scene at the top. `enter()` of the new scene is called; `exit()` of the old top is **not** called (it is frozen and can be returned by `pop`).
+  - `pop(): Scene | null` — removes the top scene. Calls `exit()` on the removed scene; calls `handleResume()` on the new top if it has that method. Returns the removed scene; if the stack was empty — returns `null` and does nothing.
+  - `replace(scene: Scene): void` — replaces the top scene with a new one. `exit()` is called on the old top, it is removed; the new scene is placed at the top and `enter()` is called on it. If the stack was empty — equivalent to `push(scene)`.
+  - `current(): Scene | null` — the top scene, or `null` if the stack is empty.
+  - `update(dt: number, input: InputSystem): void` — delegates `update(dt, input)` to the top scene; no-op if the stack is empty.
+  - `draw(ctx: CanvasRenderingContext2D): void` — draws the top scene. If the top scene has `drawBelow === true`, first draws the scene below it (one level deeper), then draws the top scene. No-op if the stack is empty.
 
-## Модель данных
+## Data Model
 
-Внутреннее состояние экземпляра `SceneManager`:
+Internal state of a `SceneManager` instance:
 
-- `stack: Scene[]` — массив сцен. Вершина — последний элемент (`stack[stack.length - 1]`). Инвариант: все элементы удовлетворяют интерфейсу `Scene`.
+- `stack: Scene[]` — array of scenes. The top is the last element (`stack[stack.length - 1]`). Invariant: all elements satisfy the `Scene` interface.
 
-Связанные типы (живут в общем модуле типов):
+Related types (live in a shared type module):
 
-- `interface Scene` — см. раздел «Публичный интерфейс». Все поля/методы, кроме `enter` / `exit` / `update` / `draw`, опциональны.
-- Классы-реализации (`MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`) описаны в своих модулях; здесь важно только, что они совместимы со `Scene`.
+- `interface Scene` — see the Public Interface section. All fields/methods except `enter` / `exit` / `update` / `draw` are optional.
+- Implementation classes (`MenuScene`, `GameScene`, `PauseScene`, `GameOverScene`) are described in their own modules; what matters here is only that they are compatible with `Scene`.
 
-Никаких персистентных данных у модуля нет — стек живёт в памяти вкладки и обнуляется при перезагрузке.
+The module has no persistent data — the stack lives in the tab's memory and is reset on page reload.
 
-## Ключевые потоки
+## Key Flows
 
-**Старт приложения и первая сцена.** `bootstrap()` создаёт `SceneManager`, вызывает `sceneManager.push(new MenuScene())`. Стек переходит из пустого в `[MenuScene]`. `SceneManager` вызывает `menu.enter()` — меню подписывается на нужные ему события, готовит внутреннее состояние. Дальше `GameLoop` на каждом тике вызывает `sceneManager.update(dt, input)` и `sceneManager.draw(ctx)`, которые идут в `MenuScene`.
+**Application start and the first scene.** `bootstrap()` creates a `SceneManager` and calls `sceneManager.push(new MenuScene())`. The stack transitions from empty to `[MenuScene]`. `SceneManager` calls `menu.enter()` — the menu subscribes to the events it needs and prepares its internal state. From then on, `GameLoop` on each tick calls `sceneManager.update(dt, input)` and `sceneManager.draw(ctx)`, which are delegated to `MenuScene`.
 
-**Старт партии из меню.** Игрок жмёт `Confirm` в `MenuScene`. Меню вызывает `sceneManager.replace(new GameScene())`. `SceneManager` вызывает `menu.exit()` (меню отписывается от своих локальных подписок, если они есть), удаляет `MenuScene` из стека, кладёт `GameScene` на вершину, вызывает `game.enter()` — тот создаёт `World`, корабль, стартовую волну астероидов, сбрасывает счёт и жизни. С этого момента `update` / `draw` идут в `GameScene`.
+**Starting a round from the menu.** The player presses `Confirm` in `MenuScene`. The menu calls `sceneManager.replace(new GameScene())`. `SceneManager` calls `menu.exit()` (the menu unsubscribes from any local subscriptions it has), removes `MenuScene` from the stack, places `GameScene` on top, and calls `game.enter()` — which creates the `World`, the ship, the starting asteroid wave, resets score and lives. From this moment `update` / `draw` go to `GameScene`.
 
-**Пауза поверх игры.** Игрок жмёт `Pause` в `GameScene`. Игра вызывает `sceneManager.push(new PauseScene())`. `SceneManager` **не** вызывает `gameScene.exit()` — игра остаётся в стеке, просто замороженная. На новую вершину кладётся `PauseScene`, у неё вызывается `enter()`. Начиная со следующего тика `update(dt, input)` идёт только в `PauseScene` — `GameScene` не обновляется, её таймеры, физика и коллизии стоят. В `draw(ctx)` `SceneManager` видит у `PauseScene` флаг `drawBelow = true` и сначала рисует `GameScene` (последнее состояние мира — оно не изменилось с момента паузы), потом поверх рисует `PauseScene` (полупрозрачный оверлей с текстом «PAUSED»).
+**Pausing over the game.** The player presses `Pause` in `GameScene`. The game calls `sceneManager.push(new PauseScene())`. `SceneManager` does **not** call `gameScene.exit()` — the game remains on the stack, simply frozen. The new top is `PauseScene`, and `enter()` is called on it. Starting from the next tick, `update(dt, input)` goes only to `PauseScene` — `GameScene` does not update; its timers, physics, and collisions are paused. In `draw(ctx)`, `SceneManager` sees the `drawBelow = true` flag on `PauseScene` and first renders `GameScene` (the last world state — unchanged since the pause was triggered), then renders `PauseScene` on top (a semi-transparent overlay with "PAUSED" text).
 
-**Возврат из паузы.** Игрок жмёт `Pause` или `Confirm` в `PauseScene`. Пауза вызывает `sceneManager.pop()`. `SceneManager` снимает `PauseScene` с вершины, вызывает `pauseScene.exit()`. Новая вершина — `GameScene`. `SceneManager` проверяет наличие `gameScene.handleResume` и, если он есть, вызывает — сцена сбрасывает возможный «залипший» `wasPressed('Pause')` (через `input.clearFrame()` или эквивалент), чтобы игра мгновенно не спаузилась обратно. Со следующего тика `update` снова идёт в `GameScene` с тем же состоянием мира, что было до паузы.
+**Returning from pause.** The player presses `Pause` or `Confirm` in `PauseScene`. The pause scene calls `sceneManager.pop()`. `SceneManager` removes `PauseScene` from the top and calls `pauseScene.exit()`. The new top is `GameScene`. `SceneManager` checks for `gameScene.handleResume` and, if it exists, calls it — the scene resets any lingering `wasPressed('Pause')` (via `input.clearFrame()` or equivalent) so the game doesn't immediately pause again. From the next tick, `update` goes back to `GameScene` with the same world state as before the pause.
 
-**Game over.** В `GameScene` происходит последнее столкновение, `Scoring.isGameOver()` становится `true`. `GameScene` вызывает `sceneManager.replace(new GameOverScene(finalScore))`. `SceneManager` зовёт `gameScene.exit()` (освобождает ссылки на сущности, позволяет GC собрать World), удаляет `GameScene`, кладёт `GameOverScene` на вершину, вызывает `enter()` — тот инициирует попытку сохранить рекорд через `HighScoreStorage`, готовится к вводу имени. После подтверждения в `GameOverScene` она делает `sceneManager.replace(new MenuScene())` — цикл замыкается.
+**Game over.** A final collision occurs in `GameScene`, `Scoring.isGameOver()` becomes `true`. `GameScene` calls `sceneManager.replace(new GameOverScene(finalScore))`. `SceneManager` calls `gameScene.exit()` (releases entity references, allowing the GC to collect the World), removes `GameScene`, places `GameOverScene` on top, and calls `enter()` — which initiates a high-score save attempt via `HighScoreStorage` and prepares for name entry. After confirmation in `GameOverScene`, it calls `sceneManager.replace(new MenuScene())` — the cycle closes.
 
-## Зависимости
+## Dependencies
 
-- **`InputSystem` (тип)** — пробрасывается через сигнатуру `update(dt, input: InputSystem)` в активную сцену. `SceneManager` не вызывает у него методов, просто передаёт как параметр.
-- **`CanvasRenderingContext2D` (браузерный тип)** — пробрасывается в `draw(ctx)` активной сцены (и опционально предыдущей). `SceneManager` не вызывает рендер-примитивы сам.
-- **Интерфейс `Scene`** — собственный контракт модуля; все сцены приложения должны его реализовывать.
-- **Никаких зависимостей от конкретных сцен** — `SceneManager` не импортирует `MenuScene` / `GameScene` / `PauseScene` / `GameOverScene`. Эти связи идут снаружи: сцены передаются в `SceneManager` уже инстанцированными.
+- **`InputSystem` (type)** — passed through the `update(dt, input: InputSystem)` signature to the active scene. `SceneManager` does not call its methods; it merely passes it as a parameter.
+- **`CanvasRenderingContext2D` (browser type)** — passed into `draw(ctx)` of the active scene (and optionally the one below). `SceneManager` does not call render primitives itself.
+- **`Scene` interface** — the module's own contract; all application scenes must implement it.
+- **No dependencies on concrete scenes** — `SceneManager` does not import `MenuScene` / `GameScene` / `PauseScene` / `GameOverScene`. Those links come from outside: scenes are passed to `SceneManager` already instantiated.
 
-## Обработка ошибок
+## Error Handling
 
-- **`pop` у пустого стека** — no-op, возвращает `null`. Не бросает исключения, чтобы не ломать игровой цикл при редких гонках (например, двойной `pop` из-за быстрого двойного нажатия клавиши).
-- **`current` / `update` / `draw` у пустого стека** — no-op. `update` и `draw` просто ничего не делают; теоретически это состояние не должно возникать в рантайме после `bootstrap`, но модуль обязан не падать.
-- **Исключение внутри `enter` / `exit` / `handleResume` / `update` / `draw` сцены** — `SceneManager` сам не ловит эти исключения: они пробрасываются наружу в `GameLoop`, где уже есть верхнеуровневый try/catch (см. архитектуру). Это осознанное решение: прятать падение сцены внутри менеджера стека — значит маскировать баги; пусть падает громко, а общий обработчик решит, откатиться ли в `MenuScene`.
-- **Частичный переход в `replace`** — если в `exit()` старой сцены произошло исключение, новая сцена **не** помещается на стек, и исключение пробрасывается. Стек остаётся в согласованном состоянии: старая сцена всё ещё на вершине (её `exit` не отработал до конца, но с точки зрения стека она не снята). Вариант «насильно снять и двинуться дальше» отвергнут — лучше шумно падать.
-- **Повторный `push` той же сцены** — не проверяется, считается ответственностью вызывающей стороны. `SceneManager` положит её на вершину второй раз и вызовет `enter()` повторно; сцена должна быть к этому готова или вызывающая сторона — не делать так.
-- **`handleResume` отсутствует у новой вершины после `pop`** — просто не вызывается. Это опциональный хук.
+- **`pop` on an empty stack** — no-op, returns `null`. Does not throw to avoid breaking the game loop in rare races (e.g. a double `pop` from a rapid double key press).
+- **`current` / `update` / `draw` on an empty stack** — no-op. `update` and `draw` simply do nothing; theoretically this state should not occur at runtime after `bootstrap`, but the module must not crash.
+- **Exception inside `enter` / `exit` / `handleResume` / `update` / `draw` of a scene** — `SceneManager` does not catch these exceptions: they propagate out to `GameLoop`, which already has a top-level try/catch (see architecture). This is a deliberate decision: hiding a scene crash inside the stack manager means masking bugs; let it fail loudly, and the global handler decides whether to roll back to `MenuScene`.
+- **Partial transition in `replace`** — if an exception occurred in the old scene's `exit()`, the new scene is **not** placed on the stack and the exception propagates. The stack remains in a consistent state: the old scene is still at the top (its `exit` did not complete, but from the stack's perspective it was not removed). The option "force-remove and continue" was rejected — better to fail loudly.
+- **Repeated `push` of the same scene** — not checked; it is the caller's responsibility. `SceneManager` will place it on top a second time and call `enter()` again; the scene must be prepared for this, or the caller should not do it.
+- **`handleResume` absent on the new top after `pop`** — simply not called. This is an optional hook.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript** — унаследован от всего проекта; интерфейс `Scene` и дженерик-безопасность методов стека ловят опечатки и забытые хуки на этапе компиляции.
-- **Класс + интерфейс** — `interface Scene` как контракт, `class SceneManager` как единственная реализация стека. Без наследования, без абстрактных базовых классов: все сцены свободны реализовать `Scene` напрямую, не завися от общей «сценобазы».
-- **Чистые массивы JS (`Array<Scene>`)** — стек реализуется через `push` / `pop` / `splice` на обычном массиве. Никакой сторонней структуры данных не нужно: длина стека в реальной игре — 1–2 элемента, пиковая — 3 (`MenuScene` не существует одновременно с `GameScene`, но теоретически можно `push` `PauseScene` поверх `GameScene` поверх чего-то — всё равно короткий).
-- **Никаких сторонних библиотек** — state machine, router, rxjs и прочее избыточно для стека из трёх операций.
-- **Никакой зависимости от Canvas/DOM на уровне самого `SceneManager`** — `CanvasRenderingContext2D` только пробрасывается. Это делает модуль тривиально тестируемым с фейковыми сценами.
+- **TypeScript** — inherited from the whole project; the `Scene` interface and generic stack method safety catch typos and forgotten hooks at compile time.
+- **Class + interface** — `interface Scene` as the contract, `class SceneManager` as the sole stack implementation. No inheritance, no abstract base classes: all scenes are free to implement `Scene` directly without depending on a common "scene base".
+- **Plain JS arrays (`Array<Scene>`)** — the stack is implemented via `push` / `pop` / `splice` on an ordinary array. No third-party data structure is needed: the stack length in a real game is 1–2 elements, peaking at 3 (theoretically `PauseScene` over `GameScene` over something — still short).
+- **No third-party libraries** — state machines, routers, rxjs, and similar are excessive for a three-operation stack.
+- **No dependency on Canvas/DOM at the `SceneManager` level itself** — `CanvasRenderingContext2D` is only forwarded. This makes the module trivially testable with fake scenes.
 
-## Конфигурация
+## Configuration
 
-У модуля нет ни переменных окружения, ни секретов, ни настроек в `config.ts`. Поведение полностью определяется кодом вызывающей стороны (какие сцены создаются и когда делается `push` / `pop` / `replace`) и флагом `drawBelow` у конкретных сцен.
+The module has no environment variables, secrets, or settings in `config.ts`. Behaviour is entirely determined by the calling code (which scenes are created and when `push` / `pop` / `replace` are called) and the `drawBelow` flag on specific scenes.
 
-## Открытые вопросы
+## Open Questions
 
-- Нужен ли симметричный хук `handlePause()` для сцены, под которую положили новую (т.е. вызов у бывшей вершины в момент `push`) — пока не требуется: заморозка = «ничего не делать», специального уведомления не нужно. Если в будущем игре понадобится, например, остановить музыку при паузе, хук можно добавить без ломки контракта.
-- Стоит ли поддерживать «глубокий» `drawBelow` — т.е. рекурсивно рисовать все сцены снизу вверх до первой непрозрачной — вместо текущего «только одна нижняя». Текущего достаточно для MVP (пауза поверх игры), но если когда-нибудь добавится модальный диалог поверх паузы поверх игры, придётся расширить.
-- Передавать ли в `update` не только `InputSystem`, но и обобщённый «контекст кадра» (время, ссылки на общие сервисы) — пока явно прокидываем только `dt` и `input`, остальное сцены получают через конструкторы. Решение пересмотреть, если сцены начнут требовать много общих сервисов и конструкторы распухнут.
-- Нужен ли метод `clear()` / `reset()` для полного обнуления стека (например, на экране ошибки) — сейчас тот же эффект достигается последовательными `pop` до пустоты и `push(new MenuScene())`; отдельный метод-сахар может появиться, если сценарий «всё сломать и вернуться в меню» станет частым.
+- Whether a symmetrical `handlePause()` hook is needed for the scene that gets something pushed over it (i.e. called on the former top at the moment of `push`) — currently not required: freezing = "do nothing", no special notification is needed. If the game later needs to, say, stop music on pause, the hook can be added without breaking the contract.
+- Whether to support "deep" `drawBelow` — i.e. recursively draw all scenes bottom-up until the first opaque one — instead of the current "only one scene below". The current approach is sufficient for MVP (pause over game), but if a modal dialog over a pause over the game ever appears, it will need to be extended.
+- Whether to pass not just `InputSystem` but a general "frame context" (time, references to common services) in `update` — for now we explicitly pass only `dt` and `input`, with everything else coming through constructors. Revisit if scenes start requiring many shared services and constructors become bloated.
+- Whether a `clear()` / `reset()` method is needed for a full stack reset (e.g. on an error screen) — currently the same effect is achieved by sequential `pop`s until empty and then `push(new MenuScene())`; a separate sugar method may appear if the "blow everything up and return to menu" scenario becomes frequent.

@@ -1,127 +1,127 @@
-# Модуль `bullet`
+# Module `bullet`
 
-## Назначение
+## Purpose
 
-Модуль реализует класс `Bullet extends Entity` — снаряд, выпущенный кораблём игрока или НЛО. Пуля отвечает за прямолинейное движение с постоянной скоростью, ограниченное время жизни (TTL) и аккуратное уведомление своего «владельца» (`Ship`) о том, что слот в воздухе освободился — это критично для корректного учёта ограничения `SHIP.MAX_BULLETS = 4`. Без этого модуля механика стрельбы (основной глагол игры) не существует, а без уведомления владельца счётчик активных пуль рассинхронизируется и игрок либо теряет возможность стрелять, либо получает неограниченную скорострельность.
+The module implements the `Bullet extends Entity` class — a projectile fired by the player's ship or a UFO. The bullet is responsible for straight-line motion at constant speed, a limited lifetime (TTL), and properly notifying its "owner" (`Ship`) that an in-flight slot has been freed — this is critical for correctly enforcing the `SHIP.MAX_BULLETS = 4` limit. Without this module the shooting mechanic (the primary verb of the game) does not exist, and without the owner notification the active-bullet counter goes out of sync, causing the player to either lose the ability to shoot or gain unlimited fire rate.
 
-## Ответственности
+## Responsibilities
 
-- Объявление класса `Bullet extends Entity` с полями `lifetime`, `source`, `owner`.
-- Инициализация пули в конструкторе: позиция (носа стрелка), уже вычисленный вектор скорости (`направление × BULLET.SPEED`), радиус из `BULLET.RADIUS`, стартовое `lifetime = BULLET.LIFETIME`.
-- Пошаговое обновление: `integrate(dt)` (движение + wrap через базовый класс) плюс уменьшение `lifetime`.
-- Самоуничтожение по истечении TTL: перевод `alive = false`.
-- Уведомление владельца-корабля о выбытии пули через `owner.onBulletExpired()` — **в любом сценарии смерти**, будь то естественное истечение TTL или внешнее убийство (попадание по астероиду/НЛО/кораблю).
-- Отрисовка: короткая линия или точка 1–2px белым цветом на `CanvasRenderingContext2D`.
-- Хранение различителя источника (`source: 'ship' | 'ufo'`) для `CollisionSystem` — чтобы отличать пары `bullet(ship)↔asteroid`, `bullet(ship)↔ufo` от `bullet(ufo)↔ship`.
+- Declaring the `Bullet extends Entity` class with fields `lifetime`, `source`, and `owner`.
+- Initialising the bullet in the constructor: position (at the shooter's nose), the already-computed velocity vector (`direction × BULLET.SPEED`), radius from `BULLET.RADIUS`, initial `lifetime = BULLET.LIFETIME`.
+- Per-step update: `integrate(dt)` (movement + wrap via the base class) plus decrementing `lifetime`.
+- Self-destruction on TTL expiry: setting `alive = false`.
+- Notifying the owning ship about the bullet's removal via `owner.onBulletExpired()` — **in every death scenario**, whether it is a natural TTL expiry or an external kill (hit on an asteroid/UFO/ship).
+- Drawing: a short line or 1–2 px white dot on `CanvasRenderingContext2D`.
+- Storing the source discriminator (`source: 'ship' | 'ufo'`) for `CollisionSystem` — to distinguish the pairs `bullet(ship)↔asteroid`, `bullet(ship)↔ufo` from `bullet(ufo)↔ship`.
 
-### Не-ответственности
+### Non-Responsibilities
 
-- Не определяет коллизии — это `CollisionSystem`; `Bullet` лишь предоставляет `position` и `radius`.
-- Не решает, что делать с целью при попадании (сплит астероида, начисление очков, потеря жизни) — это резолюция `World` по списку `CollisionEvent`.
-- Не создаёт себя сама: экземпляры рождаются в `Ship.fire()` и в AI-коде `Ufo` (по таймеру выстрела), не внутри `Bullet`.
-- Не следит за лимитом `SHIP.MAX_BULLETS` — лимит живёт в `Ship` (счётчик `bulletsInFlight`); `Bullet` только уведомляет о своём выбытии.
-- Не знает про волны, счёт, HUD, сцены.
-- Не ловит исключения: если `owner.onBulletExpired()` упадёт, исключение пойдёт наверх к верхнеуровневому try/catch игрового цикла.
-- Не содержит звуковых эффектов и частиц — это выносится в `Particle`/будущий аудиомодуль.
+- Does not detect collisions — that is `CollisionSystem`; `Bullet` only provides `position` and `radius`.
+- Does not decide what happens to the target on hit (asteroid split, point award, life loss) — that is `World`'s collision resolution from `CollisionEvent` list.
+- Does not create itself: instances are born in `Ship.fire()` and in `Ufo` AI code (on a fire timer), not inside `Bullet`.
+- Does not track the `SHIP.MAX_BULLETS` limit — the limit lives in `Ship` (counter `bulletsInFlight`); `Bullet` only notifies on its own removal.
+- Does not know about waves, score, HUD, or scenes.
+- Does not catch exceptions: if `owner.onBulletExpired()` throws, the exception propagates up to the game loop's top-level try/catch.
+- Contains no sound effects or particles — those are delegated to `Particle` / a future audio module.
 
-## Публичный интерфейс
+## Public Interface
 
-Единственный экспорт — класс:
+Single export — the class:
 
-- `class Bullet extends Entity` — пуля с ограниченным временем жизни.
+- `class Bullet extends Entity` — a bullet with a limited lifetime.
 
-Поля экземпляра (сверх унаследованных `position`, `velocity`, `radius`, `alive`):
+Instance fields (beyond inherited `position`, `velocity`, `radius`, `alive`):
 
-- `lifetime: number` — оставшееся время жизни в секундах; убывает на каждом тике.
-- `source: 'ship' | 'ufo'` — кто выстрелил; читается `CollisionSystem` для выбора релевантных пар.
-- `owner: Ship | Ufo | null` — прямая ссылка на стрелка. Для пули корабля — обязательна (нужна для `onBulletExpired`); для пули НЛО допустима `null` или ссылка на `Ufo` (пока не используется, оставлена на случай расширения AI).
+- `lifetime: number` — remaining lifetime in seconds; decremented each tick.
+- `source: 'ship' | 'ufo'` — who fired it; read by `CollisionSystem` to select relevant pairs.
+- `owner: Ship | Ufo | null` — direct reference to the shooter. Mandatory for a ship bullet (needed for `onBulletExpired`); `null` or a `Ufo` reference is acceptable for a UFO bullet (not currently used, kept for potential AI expansion).
 
-Конструктор:
+Constructor:
 
-- `constructor(position: Vec2, velocity: Vec2, source: 'ship' | 'ufo', owner: Ship | Ufo | null)` — `radius` берётся из `BULLET.RADIUS`, `lifetime` инициализируется `BULLET.LIFETIME`. `velocity` уже вычислен вызывающей стороной (как правило: `fromAngle(heading, BULLET.SPEED)` у корабля плюс наследование его скорости; у НЛО — направление на игрока с учётом точности).
+- `constructor(position: Vec2, velocity: Vec2, source: 'ship' | 'ufo', owner: Ship | Ufo | null)` — `radius` is taken from `BULLET.RADIUS`, `lifetime` is initialised to `BULLET.LIFETIME`. `velocity` is already computed by the caller (typically: `fromAngle(heading, BULLET.SPEED)` for the ship, inheriting its velocity; for the UFO — direction toward the player accounting for accuracy).
 
-Методы:
+Methods:
 
-- `update(dt: number): void` — уменьшает `lifetime`, вызывает `integrate(dt)`; при `lifetime <= 0` выставляет `alive = false` и, если владелец — `Ship`, вызывает `owner.onBulletExpired()`.
-- `draw(ctx: CanvasRenderingContext2D): void` — рисует короткую белую линию или точку 1–2px.
+- `update(dt: number): void` — decrements `lifetime`, calls `integrate(dt)`; when `lifetime <= 0` sets `alive = false` and, if the owner is a `Ship`, calls `owner.onBulletExpired()`.
+- `draw(ctx: CanvasRenderingContext2D): void` — draws a short white line or a 1–2 px dot.
 
-Модуль не экспортирует ни свободных функций, ни констант.
+The module exports no free functions or constants.
 
-## Модель данных
+## Data Model
 
-Модуль не владеет таблицами/коллекциями — описывает форму одного объекта в памяти.
+The module does not own tables or collections — it describes the shape of one object in memory.
 
-**Поля `Bullet`:**
+**`Bullet` fields:**
 
-| Поле | Тип | Значение по умолчанию | Назначение |
+| Field | Type | Default | Purpose |
 |---|---|---|---|
-| `position` | `Vec2` | из конструктора | позиция пули; стартует у носа стрелка |
-| `velocity` | `Vec2` | из конструктора | постоянный вектор движения; не меняется после создания |
-| `radius` | `number` | `BULLET.RADIUS` (2) | радиус коллизии |
-| `alive` | `boolean` | `true` | переходит в `false` при истечении TTL или попадании |
-| `lifetime` | `number` | `BULLET.LIFETIME` (1.0 с) | оставшееся время жизни |
-| `source` | `'ship' \| 'ufo'` | из конструктора | тип источника, нужен для фильтрации пар коллизий |
-| `owner` | `Ship \| Ufo \| null` | из конструктора | ссылка на стрелка для `onBulletExpired` |
+| `position` | `Vec2` | from constructor | bullet position; starts at the shooter's nose |
+| `velocity` | `Vec2` | from constructor | constant motion vector; unchanged after creation |
+| `radius` | `number` | `BULLET.RADIUS` (2) | collision radius |
+| `alive` | `boolean` | `true` | transitions to `false` on TTL expiry or hit |
+| `lifetime` | `number` | `BULLET.LIFETIME` (1.0 s) | remaining lifetime |
+| `source` | `'ship' \| 'ufo'` | from constructor | source type, used to filter collision pairs |
+| `owner` | `Ship \| Ufo \| null` | from constructor | reference to the shooter for `onBulletExpired` |
 
-**Связи.** Пуля хранит обратную ссылку на своего владельца (`owner`). Это единственная нетривиальная связь между сущностями в игре: остальные не ссылаются друг на друга напрямую. Связь нужна, чтобы пуля могла дёрнуть `onBulletExpired` при любой причине смерти — без неё пришлось бы либо делать глобальную шину событий, либо заставлять `World` помнить, какая пуля чья (что размазывает инвариант по коду).
+**Relations.** The bullet holds a back-reference to its owner (`owner`). This is the only non-trivial inter-entity reference in the game: other entities do not reference each other directly. The reference is needed so the bullet can call `onBulletExpired` in any death scenario — without it one would need either a global event bus or `World` tracking which bullet belongs to which ship (spreading the invariant across the codebase).
 
-Индексов нет, персистентности нет.
+No indexes, no persistence.
 
-## Ключевые потоки
+## Key Flows
 
-**Создание пули кораблём.** `Ship.fire()` проверяет кулдаун и лимит `bulletsInFlight < SHIP.MAX_BULLETS`. Если оба условия выполнены: вычисляет стартовую позицию как нос корабля (`position + fromAngle(heading, SHIP.RADIUS)`), скорость как `add(ship.velocity, fromAngle(heading, BULLET.SPEED))` (наследование импульса корабля + скорость пули), создаёт `new Bullet(pos, vel, 'ship', this)`, инкрементирует `bulletsInFlight`, добавляет пулю в `world.bullets`. `Ship` сбрасывает таймер перезарядки.
+**Ship creating a bullet.** `Ship.fire()` checks cooldown and limit `bulletsInFlight < SHIP.MAX_BULLETS`. If both conditions are met: computes the starting position as the ship's nose (`position + fromAngle(heading, SHIP.RADIUS)`), velocity as `add(ship.velocity, fromAngle(heading, BULLET.SPEED))` (inheriting ship momentum + bullet speed), creates `new Bullet(pos, vel, 'ship', this)`, increments `bulletsInFlight`, adds the bullet to `world.bullets`. `Ship` resets the reload timer.
 
-**Тик движения.** На каждом `update(dt)` пуля сначала уменьшает `lifetime -= dt`. Если `lifetime <= 0` — выставляет `alive = false` и, если `source === 'ship'` и `owner instanceof Ship`, вызывает `owner.onBulletExpired()`, который декрементирует `bulletsInFlight`. Затем вызывается `integrate(dt)` — базовый шаг движения с wrap-around по размерам канваса (пули, как и всё остальное в игре, переезжают через края).
+**Motion tick.** On each `update(dt)` the bullet first decrements `lifetime -= dt`. If `lifetime <= 0` — sets `alive = false` and, if `source === 'ship'` and `owner instanceof Ship`, calls `owner.onBulletExpired()`, which decrements `bulletsInFlight`. Then `integrate(dt)` is called — the basic motion step with wrap-around by canvas size (bullets, like everything else in the game, cross screen edges).
 
-**Смерть от попадания.** `CollisionSystem.detect` возвращает событие `bulletAsteroid` / `bulletUfo` / `bulletShip`. `World` в резолюции: выставляет `bullet.alive = false`, сплитит астероид (или убивает НЛО / отнимает жизнь), начисляет очки, спавнит частицы. **Важно:** после того как `World` пометил пулю мёртвой, он должен вызвать `bullet.owner.onBulletExpired()` — но проще делегировать это самой пуле через единый путь. Поэтому инвариант такой: **любой способ смерти пули корабля должен привести к вызову `onBulletExpired` ровно один раз**. Реализация — в `World.resolveCollisions`, сразу после присваивания `bullet.alive = false`: если `bullet.source === 'ship'`, дёрнуть `bullet.owner?.onBulletExpired()`. Альтернатива (и предпочтительный вариант) — вынести этот путь в метод `Bullet.kill()` на самой пуле, чтобы централизовать его; вопрос оставлен открытым.
+**Death on hit.** `CollisionSystem.detect` returns a `bulletAsteroid` / `bulletUfo` / `bulletShip` event. `World` in resolution: sets `bullet.alive = false`, splits the asteroid (or kills the UFO / takes a life), awards points, spawns particles. **Important:** after `World` marks the bullet dead, it must call `bullet.owner.onBulletExpired()` — but it is cleaner to delegate this to the bullet itself through a single path. Therefore the invariant is: **any bullet death scenario for a ship bullet must result in exactly one call to `onBulletExpired`**. Implementation — in `World.resolveCollisions`, immediately after assigning `bullet.alive = false`: if `bullet.source === 'ship'`, call `bullet.owner?.onBulletExpired()`. Alternative (and preferred) — introduce a `Bullet.kill()` method on the bullet itself that centralises this; the question is left open.
 
-**Отрисовка.** `draw(ctx)` ставит `strokeStyle = '#fff'`, `lineWidth = 2` и рисует либо короткую линию длиной 2–3px вдоль `velocity`, либо заполненный прямоугольник/окружность 2×2px в `position`. Никаких дополнительных эффектов (след, свечение) в MVP нет.
+**Drawing.** `draw(ctx)` sets `strokeStyle = '#fff'`, `lineWidth = 2` and draws either a short line 2–3 px long along `velocity`, or a filled rectangle/circle 2×2 px at `position`. No additional effects (trail, glow) in MVP.
 
-## Зависимости
+## Dependencies
 
-- **`entity`** — базовый класс `Entity`, метод `integrate(dt)`, поля `position`/`velocity`/`radius`/`alive`.
-- **`vec2-math`** — тип `Vec2` для параметров конструктора и полей (через `Entity`).
-- **`config`** — константы `BULLET.RADIUS`, `BULLET.LIFETIME` (и косвенно `CANVAS.WIDTH`/`HEIGHT` внутри `integrate`).
-- **`ship`** — только как тип: `import type { Ship }` для поля `owner`. Класс `Bullet` не вызывает ничего из `Ship`, кроме метода `onBulletExpired()` через объект; использование `import type` исключает кольцевую зависимость (`Ship` импортирует `Bullet` по значению, `Bullet` — `Ship` только по типу).
-- **`ufo`** — аналогично, `import type { Ufo }` для поля `owner`.
-- **Стандартный DOM (`CanvasRenderingContext2D`)** — только как тип параметра `draw(ctx)`.
+- **`entity`** — base class `Entity`, method `integrate(dt)`, fields `position`/`velocity`/`radius`/`alive`.
+- **`vec2-math`** — type `Vec2` for constructor parameters and fields (via `Entity`).
+- **`config`** — constants `BULLET.RADIUS`, `BULLET.LIFETIME` (and indirectly `CANVAS.WIDTH`/`HEIGHT` inside `integrate`).
+- **`ship`** — type only: `import type { Ship }` for the `owner` field. `Bullet` does not call anything from `Ship` except `onBulletExpired()` through the object; using `import type` avoids a circular dependency (`Ship` imports `Bullet` by value, `Bullet` imports `Ship` by type only).
+- **`ufo`** — similarly, `import type { Ufo }` for the `owner` field.
+- **Standard DOM (`CanvasRenderingContext2D`)** — only as the type parameter for `draw(ctx)`.
 
-Обратные зависимости: `Ship` создаёт пули в `fire()`, `Ufo` — в своей AI-логике; `World` хранит `bullets: Bullet[]`; `CollisionSystem` читает `source`, `position`, `radius`.
+Reverse dependencies: `Ship` creates bullets in `fire()`, `Ufo` creates them in its AI logic; `World` holds `bullets: Bullet[]`; `CollisionSystem` reads `source`, `position`, `radius`.
 
-## Обработка ошибок
+## Error Handling
 
-- **`owner === null` у пули корабля.** Контрактное нарушение вызывающего: если `source === 'ship'`, `owner` должен быть `Ship`. Защита — опциональный вызов: `if (this.source === 'ship' && this.owner instanceof Ship) this.owner.onBulletExpired()`. Если `owner` оказался `null`, пуля просто умрёт, счётчик `bulletsInFlight` у корабля останется завышен — это будет видно визуально (игрок перестанет стрелять). Баг всплывёт в dev-сборке сразу.
-- **Исключение в `owner.onBulletExpired()`.** `Bullet` ничего не ловит: исключение пробросится через `update(dt)` в игровой цикл к верхнеуровневому try/catch (см. `architecture.md`, раздел «Обработка ошибок»). В dev — игра остановится, в проде — вернётся в `MenuScene`.
-- **Двойная смерть (TTL истёк и попадание в том же тике).** Сценарий: на одном тике `update(dt)` обнулил `lifetime` (alive → false, `onBulletExpired` вызван), затем `CollisionSystem` нашёл коллизию этой же пули с астероидом. Защита — в резолюции `World` проверять `if (!bullet.alive) continue;` перед обработкой события; второй вызов `onBulletExpired` не должен произойти. Альтернатива: делать `onBulletExpired` идемпотентным на стороне `Ship` (`if (this.bulletsInFlight > 0) this.bulletsInFlight--`), но это маскирует баг. Решение — фильтр в `World`.
-- **Невалидный `dt` (`NaN`, отрицательный).** Не фильтруется. `lifetime` станет `NaN`, сравнение `<= 0` вернёт `false`, пуля «зависнет»; `integrate` даст `NaN` в позиции. Это баг вызывающего (`GameLoop`/`GameScene`), ловится визуально.
-- **Downstream failure, partial success** — неприменимо: синхронный модуль без I/O.
+- **`owner === null` for a ship bullet.** Contract violation by the caller: if `source === 'ship'`, `owner` must be a `Ship`. Protection — optional call: `if (this.source === 'ship' && this.owner instanceof Ship) this.owner.onBulletExpired()`. If `owner` is `null`, the bullet simply dies, and the ship's `bulletsInFlight` counter stays elevated — visible immediately (player stops being able to shoot). The bug will surface in a dev build at once.
+- **Exception in `owner.onBulletExpired()`.** `Bullet` catches nothing: the exception propagates through `update(dt)` into the game loop's top-level try/catch (see `architecture.md`, "Error Handling"). In dev — the game stops; in prod — returns to `MenuScene`.
+- **Double death (TTL expired and hit in the same tick).** Scenario: in one tick `update(dt)` zeroed `lifetime` (alive → false, `onBulletExpired` called), then `CollisionSystem` found a collision for the same bullet with an asteroid. Protection — in `World` resolution: check `if (!bullet.alive) continue;` before processing an event; a second `onBulletExpired` call should not happen. Alternative: make `onBulletExpired` idempotent on the `Ship` side (`if (this.bulletsInFlight > 0) this.bulletsInFlight--`), but this masks the bug. Solution — filter in `World`.
+- **Invalid `dt` (`NaN`, negative).** Not filtered. `lifetime` will become `NaN`, the comparison `<= 0` will return `false`, the bullet will "hang"; `integrate` will produce `NaN` in position. This is a caller bug (`GameLoop`/`GameScene`), caught visually.
+- **Downstream failure, partial success** — not applicable: synchronous module with no I/O.
 
-Сам модуль наружу исключений не кидает.
+The module itself does not throw exceptions.
 
-## Стек и библиотеки
+## Stack & Libraries
 
-- **TypeScript (ES2022 target), обычный `class extends Entity`.** Язык задан архитектурой; наследование — стандартный механизм ES2022. Никаких дополнительных фич языка не требуется.
-- **`import type` для `Ship` и `Ufo`.** Обязательно `type-only` импорт, чтобы при компиляции не возникало кольцевой зависимости значений (`Ship` → `Bullet` → `Ship`). TypeScript вырезает `type`-импорты на этапе эмита.
-- **Без внешних библиотек.** Модуль — несколько десятков строк поверх `Entity`, `vec2-math` и `config`.
-- **Без пула объектов.** Пули живут 1 секунду, их не более 4–5 одновременно; GC-давление пренебрежимо.
-- **Рендер — через прямые вызовы `ctx.strokeRect`/`ctx.beginPath`+`ctx.stroke`.** Использовать утилиту `Renderer` можно, но для 1–2px точки/линии оверкилл; решим при первом проходе по `Renderer`.
+- **TypeScript (ES2022 target), plain `class extends Entity`.** Language defined by architecture; inheritance is a standard ES2022 mechanism. No additional language features required.
+- **`import type` for `Ship` and `Ufo`.** Must be type-only imports so that no circular value dependency arises at compile time (`Ship` → `Bullet` → `Ship`). TypeScript strips `type` imports at emit.
+- **No external libraries.** The module is a few dozen lines on top of `Entity`, `vec2-math`, and `config`.
+- **No object pooling.** Bullets live for 1 second, at most 4–5 simultaneously; GC pressure is negligible.
+- **Rendering — direct `ctx.strokeRect`/`ctx.beginPath`+`ctx.stroke` calls.** Using `Renderer` utility is possible, but overkill for a 1–2 px point/line; will revisit on the first `Renderer` pass.
 
-## Конфигурация
+## Configuration
 
-Внешней конфигурации модуль не имеет — ни env-переменных, ни секретов. Все числовые параметры берутся из модуля `config`:
+The module has no external configuration — no env variables or secrets. All numeric parameters come from the `config` module:
 
-| Константа | Значение | Назначение |
+| Constant | Value | Purpose |
 |---|---|---|
-| `BULLET.RADIUS` | `2` | радиус коллизии пули |
-| `BULLET.SPEED` | `600` | скорость пули в px/s (читается **вызывающей стороной** при вычислении `velocity`, не самим `Bullet`) |
-| `BULLET.LIFETIME` | `1.0` | стартовое значение `lifetime` в секундах |
+| `BULLET.RADIUS` | `2` | bullet collision radius |
+| `BULLET.SPEED` | `600` | bullet speed in px/s (read by **the caller** when computing `velocity`, not by `Bullet` itself) |
+| `BULLET.LIFETIME` | `1.0` | initial `lifetime` value in seconds |
 
-Внутренних констант (цвет линии, толщина) модуль может захардкодить (`'#fff'`, `2`) — это визуальный стиль, не баланс; либо вынести в `config.BULLET.COLOR` при росте числа визуальных параметров. Пока — захардкожено.
+Internal constants (line colour, width) can be hardcoded (`'#fff'`, `2`) — these are visual style, not balance; they can be moved to `config.BULLET.COLOR` when the number of visual parameters grows. For now — hardcoded.
 
-## Открытые вопросы
+## Open Questions
 
-- **Единый метод `Bullet.kill()` vs явный вызов `onBulletExpired` из `World`.** Сейчас описан инвариант «любой путь смерти → `onBulletExpired`», но реализация размазана между `Bullet.update` (для TTL) и `World.resolveCollisions` (для попаданий). Чище — ввести `Bullet.kill()`, который делает `alive = false` и `owner?.onBulletExpired?.()`, и вызывать его из обоих мест. Откладывается до реализации `CollisionSystem`/`World`.
-- **`owner` для пули НЛО.** Сейчас разрешён `Ufo | null`, но ни один код его не читает. Оставить ли поле для будущего (например, статистика «кто кого убил») или упростить тип до `Ship | null` — решим при реализации `Ufo`.
-- **Наследование импульса корабля пулей.** В каноничных Asteroids пуля берёт скорость как `ship.velocity + direction * BULLET.SPEED`, что делает быстро летящий корабль опаснее для себя (можно догнать свою же пулю). Нужно ли это поведение или делаем «чистую» скорость `direction * BULLET.SPEED` — вопрос баланса, решается при тюнинге после первой играбельной сборки.
-- **Длина визуальной линии пули.** Точка 2×2px наиболее близка к оригиналу; короткая линия вдоль `velocity` (2–4px) выглядит «быстрее» и даёт визуальное ощущение направления. Выбор — при визуальном тюнинге.
-- **Вынос цвета и толщины в `config.BULLET`.** Пока захардкожено; если появятся варианты (например, цвет пули НЛО — красный), вынесем в `config`.
+- **Single `Bullet.kill()` method vs. explicit `onBulletExpired` call from `World`.** Currently the invariant "any death path → `onBulletExpired`" is described, but the implementation is spread between `Bullet.update` (for TTL) and `World.resolveCollisions` (for hits). Cleaner — introduce `Bullet.kill()`, which does `alive = false` and `owner?.onBulletExpired?.()`, and call it from both places. Deferred until `CollisionSystem`/`World` implementation.
+- **`owner` for UFO bullet.** Currently `Ufo | null` is allowed, but no code reads it. Leave the field for the future (e.g. statistics "who killed whom") or simplify the type to `Ship | null` — will decide during `Ufo` implementation.
+- **Ship momentum inheritance by bullet.** Canonical Asteroids: bullet velocity is `ship.velocity + direction * BULLET.SPEED`, making a fast-flying ship more dangerous (can catch its own bullet). Whether this behaviour is needed or a "clean" speed `direction * BULLET.SPEED` is preferred — a balance question, resolved during tuning after the first playable build.
+- **Visual bullet line length.** A 2×2 px dot is closest to the original; a short line along `velocity` (2–4 px) looks "faster" and gives a visual sense of direction. Choice — during visual tuning.
+- **Moving colour and width to `config.BULLET`.** Currently hardcoded; if variants appear (e.g. UFO bullet colour — red), they will move to `config`.
